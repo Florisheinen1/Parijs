@@ -1,5 +1,6 @@
 package client
 
+import game.Board
 import protocol.PACKET_TYPES
 import java.net.Socket
 import java.nio.charset.Charset
@@ -8,6 +9,8 @@ import java.util.Scanner
 class Client(val serverSocket: Socket, val gui: Gui) {
     val scanner = Scanner(this.serverSocket.getInputStream());
     val writer = this.serverSocket.getOutputStream();
+
+    val board = Board();
 
     fun run() {
         // First, wait for welcome lobby message
@@ -27,6 +30,8 @@ class Client(val serverSocket: Socket, val gui: Gui) {
         var i = 0;
 
         while (true) {
+            gui.updateBoard(board);
+
             // Read turn message
             val turnMsg = this.read();
             println("[%d]".format(i));
