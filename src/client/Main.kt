@@ -4,10 +4,15 @@ import java.net.ConnectException
 import java.net.InetAddress
 import java.net.Socket;
 import java.util.NoSuchElementException
-import java.util.Scanner
+import kotlin.concurrent.thread
 
 fun main() {
     println("Hello from client! blabla");
+
+    val gui = Gui();
+
+    thread { gui.run() };
+
 
     val serverAddress = InetAddress.getLocalHost();
     val serverPort = 39939;
@@ -15,7 +20,7 @@ fun main() {
     try {
         val serverSocket = Socket(serverAddress, serverPort);
 
-        Client(serverSocket).run();
+        Client(serverSocket, gui).run();
 
     } catch (e: ConnectException) {
         println("Could not connect to server. Is server running?");

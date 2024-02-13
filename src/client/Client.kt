@@ -5,7 +5,7 @@ import java.net.Socket
 import java.nio.charset.Charset
 import java.util.Scanner
 
-class Client(val serverSocket: Socket) {
+class Client(val serverSocket: Socket, val gui: Gui) {
     val scanner = Scanner(this.serverSocket.getInputStream());
     val writer = this.serverSocket.getOutputStream();
 
