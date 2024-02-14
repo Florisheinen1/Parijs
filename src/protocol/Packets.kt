@@ -8,6 +8,8 @@ enum class PACKET_TYPES {
     WELCOME_IN_LOBBY,
     GAME_STARTED,
     GIVE_SETUP_TURN,
+    APPROVE_SETUP_TURN,
+    DENY_SETUP_TURN,
     SETUP_FINISHED,
     ;
 
@@ -25,6 +27,13 @@ enum class PACKET_TYPES {
         return boardFromString(s.removePrefix(GIVE_SETUP_TURN.name + "="));
     }
 
+    fun approveSetupToString(board: Board, playerColor: PlayerColor): String {
+        return APPROVE_SETUP_TURN.name + "=" + boardToString(board, playerColor);
+    }
+    fun approveSetupFromString(s: String): Board {
+        return boardFromString(s.removePrefix(APPROVE_SETUP_TURN.name + "="));
+    }
+
     // ================ HELPERS ==================== //
 
     private fun boardToString(board: Board, playerColor: PlayerColor): String {
@@ -39,14 +48,21 @@ enum class PACKET_TYPES {
         }
 
         var cards = cardsToString(board.selectedCardsForGame);
-        var pickedBlock = blockToString(if (playerColor==PlayerColor.PLAYER_BLUE) board.topBlueBlock else board.topOrangeBlock);
+        var pickedBlock = if (playerColor==PlayerColor.PLAYER_BLUE) board.topBlueBlock else board.topOrangeBlock;
+        var pickedBlockString: String = "";
+        if (pickedBlock != null) {
+            pickedBlockString = blockToString(if (playerColor == PlayerColor.PLAYER_ORANGE) pickedBlock.getInverted() else pickedBlock);
+        }
+
+        var tiles = tilesToString(board.tiles.toList(), playerColor);
 
         return arrayOf(
                 unpickedBuildings,
                 bluePickedBuildings,
                 orangePickedBuildings,
                 cards,
-                pickedBlock,
+                pickedBlockString,
+                tiles,
         ).joinToString(separator = ":");
     }
 
@@ -59,7 +75,36 @@ enum class PACKET_TYPES {
         board.orangeInventoryBuildings = board.getPlacablesFromNames(placeNamesFromString(spl[2]));
         board.selectedCardsForGame = cardsFromString(spl[3]);
         board.topBlueBlock = blockFromString(spl[4]);
+
+        val tiles = tilesFromString(spl[5]);
+
+        for (i in 0..63) {
+            board.tiles[i] = tiles[i];
+        }
+
         return board;
+    }
+
+    private fun tilesToString(tiles: List<Tile>, playerColor: PlayerColor): String {
+        val shouldInvert = playerColor == PlayerColor.PLAYER_ORANGE;
+        val correctTileStrings = Vector<String>();
+
+        for (tile in tiles) {
+            if (shouldInvert) {
+                correctTileStrings.add(tile.getInverted().name);
+            } else {
+                correctTileStrings.add(tile.name);
+            }
+        }
+        return correctTileStrings.joinToString(prefix = "[", separator = ",", postfix = "]");
+    }
+    private fun tilesFromString(s: String): Vector<Tile> {
+        val tileStrings = s.take(s.length-1).drop(1).split(",");
+        val tiles = Vector<Tile>();
+        for (tileString in tileStrings) {
+            tiles.add(Tile.valueOf(tileString));
+        }
+        return tiles;
     }
 
     private fun cardsToString(cards: List<Cards>): String {
@@ -82,7 +127,7 @@ enum class PACKET_TYPES {
         }
     }
 
-    private fun blockFromString(s: String): Block? {
+    fun blockFromString(s: String): Block? {
         if (s.isEmpty()) return null;
         val vals = s.take(s.length - 1).drop(1).split(",");
         return Block(

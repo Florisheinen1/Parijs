@@ -39,6 +39,7 @@ class Game(private val player1: ClientHandler, private val player2: ClientHandle
         val player = getClientHandler(turn);
         player.write(PACKET_TYPES.GIVE_SETUP_TURN.giveSetupToString(board, turn));
 
+        var failure = false;
         val responseSplit = player.read().split(":");
         when (responseSplit[0]) {
             "PICKED_BUILDING" -> {
@@ -48,8 +49,22 @@ class Game(private val player1: ClientHandler, private val player2: ClientHandle
             }
             "PLACED_BLOCK" -> {
                 println("This player %s placed the block".format(turn))
+                val pos = Vec2(
+                    responseSplit[1].toInt(),
+                    responseSplit[2].toInt()
+                );
+                val block = if (turn == PlayerColor.PLAYER_BLUE) board.topBlueBlock else board.topOrangeBlock;
+                board.placeBlock(block!!, pos, turn);
             }
-            else -> println("No fucking clue what this player did");
+            else -> {
+                println("No fucking clue what this player did");
+                failure = true;
+            }
+        }
+        if (!failure) {
+            player.write(PACKET_TYPES.APPROVE_SETUP_TURN.approveSetupToString(board, turn));
+        } else {
+            player.write(PACKET_TYPES.DENY_SETUP_TURN.name);
         }
     }
 

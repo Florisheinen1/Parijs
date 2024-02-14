@@ -65,6 +65,20 @@ class Client(val serverSocket: Socket, val gui: Gui) {
 
         println("Detected being picked: '%s'".format(board.lastMove));
         write(board.lastMove as String);
+
+        // Wait for confirmation:
+        val response = read();
+        when (response.split("=")[0]) {
+            PACKET_TYPES.APPROVE_SETUP_TURN.name -> {
+                println("Our move got approved!");
+                this.board = PACKET_TYPES.APPROVE_SETUP_TURN.approveSetupFromString(response);
+                this.gui.updateBoard(this.board);
+            }
+            PACKET_TYPES.DENY_SETUP_TURN.name -> {
+                println("Oh no, we failed according to the server");
+            }
+        }
+
         return;
     }
 

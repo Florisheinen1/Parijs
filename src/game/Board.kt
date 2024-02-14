@@ -50,14 +50,14 @@ class Board {
     }
 
     // ============= Part 1: Handle part one ======================== //
-    val tiles: Array<Tile> = Array<Tile>(SIZE*SIZE) {Tile.BRICKS};
+    var tiles: Array<Tile> = Array<Tile>(SIZE*SIZE) {Tile.BRICKS};
 
     var lastMove: String? = null;
     var unpickedBuildings = this.getAllBuildings();
     var blueInventoryBuildings = Vector<Placable>();
     var orangeInventoryBuildings = Vector<Placable>();
 
-    fun placeBlock(block: Block, pos: Vec2) {
+    fun placeBlock(block: Block, pos: Vec2, player: PlayerColor) {
         if (
                 pos.x < 0 || pos.x >= SIZE ||
                 pos.y < 0 || pos.y >= SIZE ||
@@ -71,7 +71,19 @@ class Board {
             this.setTile(block.bottomLeft, pos.x, pos.y+1);
             this.setTile(block.bottomRight, pos.x+1, pos.y+1);
         }
-        lastMove = "PLACED_BLOCK:" + PACKET_TYPES.GIVE_SETUP_TURN.blockToString(block);
+
+        when (player) {
+            PlayerColor.PLAYER_ORANGE -> {
+                unplacedOrangeBlocks.removeElement(topOrangeBlock);
+                topOrangeBlock = if (unplacedOrangeBlocks.isEmpty()) null else  unplacedOrangeBlocks[0];
+            }
+            PlayerColor.PLAYER_BLUE -> {
+                unplacedBlueBlocks.removeElement(topBlueBlock)
+                topBlueBlock = if (unplacedBlueBlocks.isEmpty()) null else unplacedBlueBlocks[0];
+            }
+        }
+
+        lastMove = "PLACED_BLOCK:" + pos.x + ":" + pos.y;
     }
 
     fun pickBuilding(buildingName: PlacableName, playerColor: PlayerColor) {

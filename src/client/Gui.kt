@@ -24,6 +24,8 @@ import javax.swing.text.BadLocationException
 import kotlin.concurrent.thread
 import kotlin.math.abs
 
+var SCALE_FACTOR = 0.7;
+
 var SELECTED_SCREEN_BUILDING: ScreenBuilding? = null;
 var SELECTED_BLOCK: TopBlock? = null;
 var HOVERS_ON_BOARD: Boolean = false;
@@ -192,10 +194,10 @@ abstract class ScreenBuilding(val building: Placable) : MouseAdapter(), MouseMot
 }
 
 class ScreenPickedBuildingArea(board: Board, val playerColor: PlayerColor) : ParisScreenElement() {
-    private val AREA_SIZE = 420;
+    private val AREA_SIZE = (420* SCALE_FACTOR).toInt();
     private val UNIT_SIZE = AREA_SIZE / 7;
-    private val yOffset = 30;
-    private val xOffset = if (playerColor == PlayerColor.PLAYER_BLUE) -600 else 600;
+    private val yOffset = (30* SCALE_FACTOR).toInt();
+    private val xOffset = ((if (playerColor == PlayerColor.PLAYER_BLUE) -600 else 600)* SCALE_FACTOR).toInt();
 
     private val pickedScreenBuildings = Vector<PickedScreenBuilding>();
 
@@ -262,9 +264,9 @@ class ScreenPickedBuildingArea(board: Board, val playerColor: PlayerColor) : Par
 }
 
 class ScreenUnpickedBuildingArea(board: Board) : ParisScreenElement() {
-    private val AREA_SIZE = 420;
+    private val AREA_SIZE = (420* SCALE_FACTOR).toInt();
     private val UNIT_SIZE = AREA_SIZE / 7;
-    private val yOffset = 650;
+    private val yOffset = (650* SCALE_FACTOR).toInt();
 
     private val unpickedScreenBuildings = Vector<UnpickedScreenBuilding>();
 
@@ -331,8 +333,8 @@ class ScreenUnpickedBuildingArea(board: Board) : ParisScreenElement() {
 }
 
 class ScreenBoard(var board: Board) : ParisScreenElement() {
-    val BOARD_SIZE_PIXELS = 600;
-    val yOffset = 20;
+    val BOARD_SIZE_PIXELS = (600 * SCALE_FACTOR).toInt();
+    val yOffset = (20 * SCALE_FACTOR).toInt();
     val unitSize = BOARD_SIZE_PIXELS / 8;
 
     var hoveredCoord: Vec2? = null;
@@ -353,35 +355,39 @@ class ScreenBoard(var board: Board) : ParisScreenElement() {
                 g.color = Color.WHITE;
                 g.fillRect(tileX, tileY, unitSize, unitSize);
 
-                drawTile(this.board.getTile(x, y), g, Vec2(tileX, tileY), unitSize);
+                val tile = this.board.getTile(x, y);
 
-//                g.color = when (this.board.getTile(x, y)) {
-//                    Tile.BLUE -> Color.BLUE
-//                    Tile.ORANGE -> Color.ORANGE
-//                    Tile.LANTERN -> Color.YELLOW
-//                    Tile.BRICKS -> Color.GRAY
-//                    Tile.SHARED -> Color.PINK
-//                }
-//
-//                g.fillRect(tileX+1, tileY+1, unitSize-2, unitSize-2);
+                if (tile == Tile.BRICKS) {
+                    g.color = Color.GRAY;
+                    g.fillRect(tileX+1, tileY+1, unitSize-2, unitSize-2);
+                } else {
+                    drawTile(this.board.getTile(x, y), g, Vec2(tileX, tileY), unitSize);
+                }
             }
         }
         drawHoverStuff(g, screenSize);
+    }
+
+    fun canPlaceBlockHere(x: Int, y: Int): Boolean {
+        return board.getTile(x, y) == Tile.BRICKS
     }
 
     fun drawHoverStuff(g: Graphics, screenSize: Vec2) {
         if (hoveredCoord != null) {
             if (SELECTED_BLOCK != null) {
                 val clippedCoord = clipBoardCoord(hoveredCoord!!);
-                val origin = boardCoordToScreen(clippedCoord.x, clippedCoord.y, screenSize);
 
-                g.color = Color.GREEN;
-                g.fillRect(origin.x, origin.y, unitSize*2, unitSize*2);
+                if (canPlaceBlockHere(clippedCoord.x, clippedCoord.y)) {
+                    val origin = boardCoordToScreen(clippedCoord.x, clippedCoord.y, screenSize);
 
-                SELECTED_BLOCK!!.block?.let { drawTile(it.topLeft, g, origin, unitSize) };
-                SELECTED_BLOCK!!.block?.let { drawTile(it.topRight, g, Vec2(origin.x+unitSize, origin.y), unitSize) };
-                SELECTED_BLOCK!!.block?.let { drawTile(it.bottomLeft, g, Vec2(origin.x, origin.y+unitSize), unitSize) };
-                SELECTED_BLOCK!!.block?.let { drawTile(it.bottomRight, g, Vec2(origin.x+unitSize, origin.y+unitSize), unitSize) };
+                    g.color = Color.GREEN;
+                    g.fillRect(origin.x, origin.y, unitSize*2, unitSize*2);
+
+                    SELECTED_BLOCK!!.block?.let { drawTile(it.topLeft, g, origin, unitSize) };
+                    SELECTED_BLOCK!!.block?.let { drawTile(it.topRight, g, Vec2(origin.x+unitSize, origin.y), unitSize) };
+                    SELECTED_BLOCK!!.block?.let { drawTile(it.bottomLeft, g, Vec2(origin.x, origin.y+unitSize), unitSize) };
+                    SELECTED_BLOCK!!.block?.let { drawTile(it.bottomRight, g, Vec2(origin.x+unitSize, origin.y+unitSize), unitSize) };
+                }
             }
         }
     }
@@ -416,8 +422,11 @@ class ScreenBoard(var board: Board) : ParisScreenElement() {
         if (e != null) {
             if (SELECTED_BLOCK != null && hoveredCoord != null) {
                 val place = clipBoardCoord(hoveredCoord!!)
-                SELECTED_BLOCK!!.block?.let { board.placeBlock(it, place) };
-                SELECTED_BLOCK = null;
+                if (canPlaceBlockHere(place.x, place.y)) {
+                    SELECTED_BLOCK!!.block?.let { board.placeBlock(it, place, PlayerColor.PLAYER_BLUE) };
+                    SELECTED_BLOCK = null;
+                    ALLOW_TURN_1 = false;
+                }
             }
         }
     }
@@ -475,8 +484,10 @@ class ScreenCard(val card: Cards, val unitSize: Int) : MouseAdapter(), MouseMoti
 }
 
 class CardsArea(var board: Board) : ParisScreenElement() {
-    val AREA_SIZE = 500;
+    val AREA_SIZE = (500* SCALE_FACTOR).toInt();
     var origin = Vec2(0, 0);
+    var offsetX = (600 * SCALE_FACTOR).toInt();
+    var offsetY = (650 * SCALE_FACTOR).toInt();
 
     val screenCards = Vector<ScreenCard>();
 
@@ -486,8 +497,8 @@ class CardsArea(var board: Board) : ParisScreenElement() {
 
     override fun draw(g: Graphics, screenSize: Vec2) {
         this.origin = Vec2(
-                (screenSize.x / 2) - (AREA_SIZE / 2) - 600,
-                650
+                (screenSize.x / 2) - (AREA_SIZE / 2) - offsetX,
+                offsetY
         );
 
         g.color = Color.PINK;
@@ -564,14 +575,13 @@ fun drawTile(tile: Tile, g: Graphics, origin: Vec2, size: Int) {
 }
 
 class TopBlock : ParisScreenElement() {
-    val SIZE = 100;
-    val xOffset = 400;
-    val yOffset = 700;
+    val SIZE = (100 * SCALE_FACTOR).toInt();
+    val xOffset = (400*SCALE_FACTOR).toInt();
+    val yOffset = (700*SCALE_FACTOR).toInt();
     var block: Block? = null;
     var origin = Vec2(0, 0);
     var isHovering = false;
     var borderSize = 5;
-    var isSelected = false;
 
     override fun draw(g: Graphics, screenSize: Vec2) {
         this.origin = Vec2(
@@ -587,7 +597,7 @@ class TopBlock : ParisScreenElement() {
                 g.color = Color.WHITE;
                 g.fillRect(origin.x - borderSize, origin.y - borderSize, SIZE+2*borderSize, SIZE+2*borderSize);
             }
-            if (isSelected) {
+            if (SELECTED_BLOCK == this) {
                 g.color = Color.RED;
                 g.fillRect(origin.x - borderSize, origin.y - borderSize, SIZE+2*borderSize, SIZE+2*borderSize);
             }
@@ -623,10 +633,8 @@ class TopBlock : ParisScreenElement() {
         if (e != null) {
             if (contains(e.x, e.y)) {
                 SELECTED_BLOCK = this;
-                this.isSelected = true;
             } else if (SELECTED_BLOCK == this && !HOVERS_ON_BOARD) {
                 SELECTED_BLOCK = null;
-                this.isSelected = false;
             }
         }
     }
@@ -649,16 +657,6 @@ class DrawingCanvas : JPanel() {
 
 
     init {
-//        println("Board width: %d, %d".format(BOARD_ORIGIN.x, BOARD_ORIGIN.y));
-
-//        super.setBorder(BorderFactory.createLineBorder(Color.BLACK));
-
-//        for (unpickedBuilding in screenBoard.board.unpickedBuildings) {
-//            val sb = ScreenBuilding(UNPICKED_BUILDINGS_ORIGIN, UNPICKED_UNIT_SIZE, unpickedBuilding);
-//            screenElements.addElement(sb);
-//            this.addMouseMotionListener(sb);
-//            this.addMouseListener(sb);
-//        }
         screenElements.addElement(this.screenBoard);
         screenElements.addElement(this.unpickedBuildings);
         screenElements.addElement(this.cardsArea);
@@ -697,27 +695,6 @@ class DrawingCanvas : JPanel() {
         orangePickedBuildings.updateBoard(board);
         topBlock.updateBoard(board);
     }
-
-
-//    private fun drawUnpickedBuildings(g: Graphics) {
-//        val unitSize = UNPICKED_BUILDINGS_AREA_SIZE / 7;
-//        val areaX = (this.width / 2) - (UNPICKED_BUILDINGS_AREA_SIZE / 2);
-//        val areaY = this.BOARD_SIZE_PIXELS + 20*2;
-//
-//        g.color = Color.PINK;
-//        g.fillRect(areaX-5, areaY-5, UNPICKED_BUILDINGS_AREA_SIZE+10, UNPICKED_BUILDINGS_AREA_SIZE+unitSize+10);
-//
-//        for (unpickedBuilding in this.board.unpickedBuildings) {
-////            if (unpickedBuilding.name != PlacableName.BIG_T) {
-////                continue;
-////            }
-//            val unpickedBuildingOrigin = getUnpickedBuildingOrigin(unpickedBuilding);
-//            var screenOriginX = areaX + unpickedBuildingOrigin.x * unitSize;
-//            var screenOriginY = areaY + unpickedBuildingOrigin.y * unitSize;
-//
-//            this.drawBuilding(g, unpickedBuilding, unitSize, Vec2(screenOriginX, screenOriginY), Color.GREEN, Color.WHITE);
-//        }
-//    }
 }
 
 class StartDialog : JDialog() {
