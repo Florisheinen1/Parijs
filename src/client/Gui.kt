@@ -25,6 +25,9 @@ import kotlin.concurrent.thread
 import kotlin.math.abs
 
 var SELECTED_SCREEN_BUILDING: ScreenBuilding? = null;
+var SELECTED_BLOCK: TopBlock? = null;
+var HOVERS_ON_BOARD: Boolean = false;
+
 var ALLOW_TURN_1: Boolean = false;
 
 class Gui : JFrame() {
@@ -87,7 +90,7 @@ class UnpickedScreenBuilding(building: Placable, val board: Board) : ScreenBuild
             return;
         }
         if (e != null) {
-            if (super.contains(e.x, e.y)) {
+            if (super.contains(e.x, e.y) && SELECTED_BLOCK == null) {
                 println("Me got clicked: %s".format(building.name.name));
                 board.pickBuilding(building.name, PlayerColor.PLAYER_BLUE);
                 ALLOW_TURN_1 = false;
@@ -270,6 +273,7 @@ class ScreenUnpickedBuildingArea(board: Board) : ParisScreenElement() {
     }
 
     override fun draw(g: Graphics, screenSize: Vec2) {
+
         val origin = Vec2(screenSize.x / 2 - AREA_SIZE / 2, yOffset);
 
         g.color = Color(100, 20, 20);
@@ -330,7 +334,13 @@ class ScreenBoard(var board: Board) : ParisScreenElement() {
     val BOARD_SIZE_PIXELS = 600;
     val yOffset = 20;
     val unitSize = BOARD_SIZE_PIXELS / 8;
+
+    var hoveredCoord: Vec2? = null;
+    private var lastScreenSize = Vec2(0, 0);
+
     override fun draw(g: Graphics, screenSize: Vec2) {
+        lastScreenSize = screenSize;
+
         val boardOrigin = Vec2((screenSize.x / 2) - (BOARD_SIZE_PIXELS / 2), yOffset);
 
         g.color = Color.GREEN;
@@ -343,21 +353,95 @@ class ScreenBoard(var board: Board) : ParisScreenElement() {
                 g.color = Color.WHITE;
                 g.fillRect(tileX, tileY, unitSize, unitSize);
 
-                g.color = when (this.board.getTile(x, y)) {
-                    Tile.BLUE -> Color.BLUE
-                    Tile.ORANGE -> Color.ORANGE
-                    Tile.LANTERN -> Color.YELLOW
-                    Tile.BRICKS -> Color.GRAY
-                    Tile.SHARED -> Color.PINK
-                }
+                drawTile(this.board.getTile(x, y), g, Vec2(tileX, tileY), unitSize);
 
-                g.fillRect(tileX+1, tileY+1, unitSize-2, unitSize-2);
+//                g.color = when (this.board.getTile(x, y)) {
+//                    Tile.BLUE -> Color.BLUE
+//                    Tile.ORANGE -> Color.ORANGE
+//                    Tile.LANTERN -> Color.YELLOW
+//                    Tile.BRICKS -> Color.GRAY
+//                    Tile.SHARED -> Color.PINK
+//                }
+//
+//                g.fillRect(tileX+1, tileY+1, unitSize-2, unitSize-2);
+            }
+        }
+        drawHoverStuff(g, screenSize);
+    }
+
+    fun drawHoverStuff(g: Graphics, screenSize: Vec2) {
+        if (hoveredCoord != null) {
+            if (SELECTED_BLOCK != null) {
+                val clippedCoord = clipBoardCoord(hoveredCoord!!);
+                val origin = boardCoordToScreen(clippedCoord.x, clippedCoord.y, screenSize);
+
+                g.color = Color.GREEN;
+                g.fillRect(origin.x, origin.y, unitSize*2, unitSize*2);
+
+                SELECTED_BLOCK!!.block?.let { drawTile(it.topLeft, g, origin, unitSize) };
+                SELECTED_BLOCK!!.block?.let { drawTile(it.topRight, g, Vec2(origin.x+unitSize, origin.y), unitSize) };
+                SELECTED_BLOCK!!.block?.let { drawTile(it.bottomLeft, g, Vec2(origin.x, origin.y+unitSize), unitSize) };
+                SELECTED_BLOCK!!.block?.let { drawTile(it.bottomRight, g, Vec2(origin.x+unitSize, origin.y+unitSize), unitSize) };
             }
         }
     }
 
+    fun clipBoardCoord(pos: Vec2): Vec2 {
+        return Vec2(
+            if (pos.x % 2 == 0) pos.x else pos.x -1,
+            if (pos.y % 2 == 0) pos.y else pos.y -1,
+        );
+    }
+
+    fun boardCoordToScreen(x: Int, y: Int, screenSize: Vec2): Vec2 {
+        val boardOrigin = Vec2((screenSize.x / 2) - (BOARD_SIZE_PIXELS / 2), yOffset);
+        val tileX = boardOrigin.x + x * unitSize;
+        val tileY = boardOrigin.y + y * unitSize;
+        return Vec2(tileX, tileY);
+    }
+
     fun updateBoard(board: Board) {
         this.board = board;
+    }
+
+    override fun mouseMoved(e: MouseEvent?) {
+        if (e != null) {
+            val matchingCoord = getBoardCoord(e.x, e.y);
+            HOVERS_ON_BOARD = matchingCoord != null;
+            hoveredCoord = matchingCoord;
+        }
+    }
+
+    override fun mouseClicked(e: MouseEvent?) {
+        if (e != null) {
+            if (SELECTED_BLOCK != null && hoveredCoord != null) {
+                val place = clipBoardCoord(hoveredCoord!!)
+                SELECTED_BLOCK!!.block?.let { board.placeBlock(it, place) };
+                SELECTED_BLOCK = null;
+            }
+        }
+    }
+
+    private fun getBoardCoord(x: Int, y: Int): Vec2? {
+        var matchingCoord: Vec2? = null;
+
+        for (column in 0..7) {
+            for (row in 0..7){
+                val tileOrigin = boardCoordToScreen(column, row, lastScreenSize);
+                val left = tileOrigin.x;
+                val right = tileOrigin.x + unitSize;
+                val top = tileOrigin.y;
+                val bottom = tileOrigin.y + unitSize;
+                if (x in left..right && y in top..bottom) {
+                    matchingCoord = Vec2(column, row);
+                    break;
+                }
+            }
+            if (matchingCoord != null) {
+                break;
+            }
+        }
+        return matchingCoord;
     }
 }
 
@@ -450,6 +534,108 @@ class CardsArea(var board: Board) : ParisScreenElement() {
     }
 }
 
+fun drawTile(tile: Tile, g: Graphics, origin: Vec2, size: Int) {
+    when (tile) {
+        Tile.BLUE -> {
+            g.color = Color(61, 85, 173);
+            g.fillRect(origin.x, origin.y, size, size);
+        }
+        Tile.ORANGE -> {
+            g.color = Color(227, 121, 18);
+            g.fillRect(origin.x, origin.y, size, size);
+        }
+        Tile.SHARED -> {
+            g.color = Color(138, 0, 138);
+            g.fillRect(origin.x, origin.y, size, size);
+        }
+        Tile.LANTERN -> {
+            g.color = Color.GRAY;
+            g.fillRect(origin.x, origin.y, size, size);
+
+            val unit = size / 4;
+            g.color = Color.YELLOW;
+            g.fillRect(origin.x + unit, origin.y + unit, size - 2*unit, size-2*unit);
+        }
+        Tile.BRICKS -> {
+            g.color = Color.GRAY;
+            g.fillRect(origin.x, origin.y, size, size);
+        }
+    }
+}
+
+class TopBlock : ParisScreenElement() {
+    val SIZE = 100;
+    val xOffset = 400;
+    val yOffset = 700;
+    var block: Block? = null;
+    var origin = Vec2(0, 0);
+    var isHovering = false;
+    var borderSize = 5;
+    var isSelected = false;
+
+    override fun draw(g: Graphics, screenSize: Vec2) {
+        this.origin = Vec2(
+            screenSize.x / 2 - SIZE / 2 + xOffset,
+                yOffset
+        );
+
+        if (block == null) {
+            g.color = Color(100, 50, 50);
+            g.fillRect(origin.x, origin.y, SIZE, SIZE);
+        } else {
+            if (isHovering) {
+                g.color = Color.WHITE;
+                g.fillRect(origin.x - borderSize, origin.y - borderSize, SIZE+2*borderSize, SIZE+2*borderSize);
+            }
+            if (isSelected) {
+                g.color = Color.RED;
+                g.fillRect(origin.x - borderSize, origin.y - borderSize, SIZE+2*borderSize, SIZE+2*borderSize);
+            }
+
+            val unit = SIZE/2;
+            drawTile(block!!.topLeft, g, origin, unit);
+
+            drawTile(block!!.topRight, g, Vec2(origin.x+unit, origin.y), unit);
+
+            drawTile(block!!.bottomLeft, g, Vec2(origin.x, origin.y+unit), unit);
+            drawTile(block!!.bottomRight, g, Vec2(origin.x+unit, origin.y+unit), unit);
+        }
+    }
+
+    private fun contains(x: Int, y: Int): Boolean {
+        val left = origin.x;
+        val right = origin.x + SIZE;
+        val top = origin.y;
+        val bottom = origin.y + SIZE;
+        return x in left..right && y in top..bottom;
+    }
+
+    override fun mouseMoved(e: MouseEvent?) {
+        if (e != null) {
+            isHovering = contains(e.x, e.y);
+        }
+    }
+
+    override fun mouseClicked(e: MouseEvent?) {
+        if (!ALLOW_TURN_1) {
+            return;
+        }
+        if (e != null) {
+            if (contains(e.x, e.y)) {
+                SELECTED_BLOCK = this;
+                this.isSelected = true;
+            } else if (SELECTED_BLOCK == this && !HOVERS_ON_BOARD) {
+                SELECTED_BLOCK = null;
+                this.isSelected = false;
+            }
+        }
+    }
+
+    fun updateBoard(newBoard: Board) {
+        block = newBoard.topBlueBlock;
+    }
+}
+
 class DrawingCanvas : JPanel() {
 
     var screenElements = Vector<ParisScreenElement>();
@@ -459,6 +645,7 @@ class DrawingCanvas : JPanel() {
     var bluePickedBuildings = ScreenPickedBuildingArea(Board(), PlayerColor.PLAYER_BLUE);
     var orangePickedBuildings = ScreenPickedBuildingArea(Board(), PlayerColor.PLAYER_ORANGE);
     var cardsArea = CardsArea(Board());
+    var topBlock = TopBlock();
 
 
     init {
@@ -477,17 +664,20 @@ class DrawingCanvas : JPanel() {
         screenElements.addElement(this.cardsArea);
         screenElements.addElement(this.bluePickedBuildings);
         screenElements.addElement(this.orangePickedBuildings);
+        screenElements.addElement(this.topBlock);
 
         this.addMouseMotionListener(unpickedBuildings);
         this.addMouseMotionListener(screenBoard);
         this.addMouseMotionListener(cardsArea);
         this.addMouseMotionListener(bluePickedBuildings);
         this.addMouseMotionListener(orangePickedBuildings);
+        this.addMouseMotionListener(topBlock);
         this.addMouseListener(unpickedBuildings);
         this.addMouseListener(screenBoard);
         this.addMouseListener(cardsArea);
         this.addMouseListener(bluePickedBuildings);
         this.addMouseListener(orangePickedBuildings);
+        this.addMouseListener(topBlock);
     }
 
     override fun paintComponent(g: Graphics) {
@@ -505,6 +695,7 @@ class DrawingCanvas : JPanel() {
         cardsArea.updateBoard(board);
         bluePickedBuildings.updateBoard(board);
         orangePickedBuildings.updateBoard(board);
+        topBlock.updateBoard(board);
     }
 
 
