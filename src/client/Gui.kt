@@ -454,6 +454,8 @@ class ScreenBoard(var board: Board) : ParisScreenElement() {
     }
 }
 
+
+
 class ScreenCard(val card: Cards, val unitSize: Int) : MouseAdapter(), MouseMotionListener {
     var isHovered = false;
 
@@ -466,6 +468,9 @@ class ScreenCard(val card: Cards, val unitSize: Int) : MouseAdapter(), MouseMoti
         val border = 5;
         g.color = Color.DARK_GRAY;
         g.fillRect(origin.x + border, origin.y + border, (unitSize-border)*2, unitSize-border*2);
+
+        g.color = Color.WHITE;
+        g.drawString(card.name, origin.x + 10, origin.y + 50);
     }
 
     fun contains(x: Int, y: Int): Boolean {
@@ -644,6 +649,68 @@ class TopBlock : ParisScreenElement() {
     }
 }
 
+
+class PassButton : ParisScreenElement() {
+    val width = (100 * SCALE_FACTOR).toInt();
+    val height = (30 * SCALE_FACTOR).toInt();
+    val xOffset = (670*SCALE_FACTOR).toInt();
+    val yOffset = (900*SCALE_FACTOR).toInt();
+    val color = Color.WHITE;
+    val background = Color.BLACK;
+    var lastScreenSize = Vec2(0, 0);
+    var isHovered = false;
+
+    var board = Board();
+
+    override fun draw(g: Graphics, screenSize: Vec2) {
+        if (!ALLOW_TURN_1) {
+            return;
+        }
+
+        lastScreenSize = screenSize;
+        val origin = Vec2(
+                (screenSize.x/2) - (width/2) + xOffset,
+                yOffset
+        );
+        g.color = if (isHovered) Color.RED else background;
+        g.fillRect(origin.x, origin.y, width, height);
+
+        g.color = if (isHovered) Color.BLACK else color;
+        g.drawString("Skip", origin.x + 15, origin.y + 15);
+    }
+
+    fun contains(x: Int, y: Int): Boolean {
+        val origin = Vec2(
+                (lastScreenSize.x/2) - (width/2) + xOffset,
+                yOffset
+        );
+        val left = origin.x;
+        val right = left + width;
+        val top = origin.y;
+        val bottom = top + height;
+        return x in left..right && y in top..bottom;
+    }
+
+    override fun mouseMoved(e: MouseEvent?) {
+        if (e != null) {
+            isHovered = contains(e.x, e.y);
+        }
+    }
+
+    override fun mouseClicked(e: MouseEvent?) {
+        if (e != null) {
+            if (isHovered) {
+                ALLOW_TURN_1 = false;
+                this.board.passTurn();
+            }
+        }
+    }
+
+    fun updateBoard(newBoard: Board) {
+        this.board = newBoard;
+    }
+}
+
 class DrawingCanvas : JPanel() {
 
     var screenElements = Vector<ParisScreenElement>();
@@ -654,6 +721,7 @@ class DrawingCanvas : JPanel() {
     var orangePickedBuildings = ScreenPickedBuildingArea(Board(), PlayerColor.PLAYER_ORANGE);
     var cardsArea = CardsArea(Board());
     var topBlock = TopBlock();
+    var passButton = PassButton();
 
 
     init {
@@ -663,6 +731,7 @@ class DrawingCanvas : JPanel() {
         screenElements.addElement(this.bluePickedBuildings);
         screenElements.addElement(this.orangePickedBuildings);
         screenElements.addElement(this.topBlock);
+        screenElements.addElement(this.passButton);
 
         this.addMouseMotionListener(unpickedBuildings);
         this.addMouseMotionListener(screenBoard);
@@ -670,12 +739,14 @@ class DrawingCanvas : JPanel() {
         this.addMouseMotionListener(bluePickedBuildings);
         this.addMouseMotionListener(orangePickedBuildings);
         this.addMouseMotionListener(topBlock);
+        this.addMouseMotionListener(passButton);
         this.addMouseListener(unpickedBuildings);
         this.addMouseListener(screenBoard);
         this.addMouseListener(cardsArea);
         this.addMouseListener(bluePickedBuildings);
         this.addMouseListener(orangePickedBuildings);
         this.addMouseListener(topBlock);
+        this.addMouseListener(passButton);
     }
 
     override fun paintComponent(g: Graphics) {
@@ -685,6 +756,17 @@ class DrawingCanvas : JPanel() {
         for (screenBoi in this.screenElements) {
             screenBoi.draw(g, Vec2(width, height));
         }
+
+        var txt = if (ALLOW_TURN_1) "It is your turn!" else "Waiting for opponent...";
+//        val nwidth = (100 * SCALE_FACTOR).toInt();
+//        val nheight = (30 * SCALE_FACTOR).toInt();
+//        val nxOffset = (670*SCALE_FACTOR).toInt();
+//        val nyOffset = (900*SCALE_FACTOR).toInt();
+        g.color = Color.BLACK;
+        g.drawString(txt,
+            width/2 + (550* SCALE_FACTOR).toInt(),
+                (700* SCALE_FACTOR).toInt()
+        )
     }
 
     fun updateBoard(board: Board) {
@@ -694,6 +776,7 @@ class DrawingCanvas : JPanel() {
         bluePickedBuildings.updateBoard(board);
         orangePickedBuildings.updateBoard(board);
         topBlock.updateBoard(board);
+        passButton.updateBoard(board);
     }
 }
 

@@ -9,6 +9,8 @@ class Game(private val player1: ClientHandler, private val player2: ClientHandle
 
     val board = Board();
 
+    var lastToPlaceBlock = PlayerColor.PLAYER_BLUE;
+
     fun run() {
         println("Started the game!");
         board.initializePartZero();
@@ -20,20 +22,24 @@ class Game(private val player1: ClientHandler, private val player2: ClientHandle
         orangePlayer.write(PACKET_TYPES.GAME_STARTED.gameStartedToString(board, PlayerColor.PLAYER_ORANGE));
 
         runPart1();
+
+        turn = lastToPlaceBlock;
+        flipTurn();
+        println("Starting the second round with: %s".format(turn.name));
+
         runPart2();
         println("This game is over!");
     }
 
     private fun runPart1() {
-
-        var isSettingUp = true;
-
-        while (isSettingUp) {
+        while (!this.board.unplacedBlueBlocks.isEmpty() || !this.board.unplacedOrangeBlocks.isEmpty()) {
             handlePart1Turn();
 
             this.flipTurn();
         }
     }
+
+
 
     private fun handlePart1Turn() {
         val player = getClientHandler(turn);
@@ -55,6 +61,10 @@ class Game(private val player1: ClientHandler, private val player2: ClientHandle
                 );
                 val block = if (turn == PlayerColor.PLAYER_BLUE) board.topBlueBlock else board.topOrangeBlock;
                 board.placeBlock(block!!, pos, turn);
+                lastToPlaceBlock = turn;
+            }
+            "PASS" -> {
+                println("Player %s passed its turn".format(turn));
             }
             else -> {
                 println("No fucking clue what this player did");

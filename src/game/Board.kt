@@ -106,6 +106,10 @@ class Board {
         lastMove = "PICKED_BUILDING:%s".format(buildingName.name);
     }
 
+    fun passTurn() {
+        lastMove = "PASS";
+    }
+
     fun updateUnpickedBuildings(names: Vector<PlacableName>) {
         this.unpickedBuildings.clear();
 
