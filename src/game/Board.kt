@@ -1,5 +1,6 @@
 package game
 
+import protocol.PACKET_TYPES
 import java.security.InvalidParameterException
 import java.util.Vector
 import java.util.*;
@@ -53,8 +54,8 @@ class Board {
 
     var lastMove: String? = null;
     var unpickedBuildings = this.getAllBuildings();
-    val blueInventoryBuildings = Vector<Placable>();
-    val orangeInventoryBuildings = Vector<Placable>();
+    var blueInventoryBuildings = Vector<Placable>();
+    var orangeInventoryBuildings = Vector<Placable>();
 
     fun placeBlock(block: Block, pos: Vec2) {
         if (
@@ -70,7 +71,7 @@ class Board {
             this.setTile(block.bottomLeft, pos.x, pos.y+1);
             this.setTile(block.bottomRight, pos.x+1, pos.y+1);
         }
-        lastMove = "PLACED_BLOCK:";
+        lastMove = "PLACED_BLOCK:" + PACKET_TYPES.GIVE_SETUP_TURN.blockToString(block);
     }
 
     fun pickBuilding(buildingName: PlacableName, playerColor: PlayerColor) {
@@ -110,7 +111,15 @@ class Board {
         }
         return names;
     }
-
+    fun getPlacablesFromNames(names: List<PlacableName>): Vector<Placable> {
+        val placables = Vector<Placable>();
+        for (placable in ALL_PLACABLES) {
+            if (names.contains(placable.name)) {
+                placables.add(placable);
+            }
+        }
+        return placables;
+    }
 
 
 

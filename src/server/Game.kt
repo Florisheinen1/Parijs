@@ -13,8 +13,11 @@ class Game(private val player1: ClientHandler, private val player2: ClientHandle
         println("Started the game!");
         board.initializePartZero();
 
-        player1.write(PACKET_TYPES.GAME_STARTED.gameStartToString(board.selectedCardsForGame));
-        player2.write(PACKET_TYPES.GAME_STARTED.gameStartToString(board.selectedCardsForGame));
+        val bluePlayer = getClientHandler(PlayerColor.PLAYER_BLUE);
+        bluePlayer.write(PACKET_TYPES.GAME_STARTED.gameStartedToString(board, PlayerColor.PLAYER_BLUE));
+
+        val orangePlayer = getClientHandler(PlayerColor.PLAYER_ORANGE);
+        orangePlayer.write(PACKET_TYPES.GAME_STARTED.gameStartedToString(board, PlayerColor.PLAYER_ORANGE));
 
         runPart1();
         runPart2();
@@ -25,16 +28,8 @@ class Game(private val player1: ClientHandler, private val player2: ClientHandle
 
         var isSettingUp = true;
 
-        var i = 0;
-
         while (isSettingUp) {
             handlePart1Turn();
-
-            if (i > 2) {
-                isSettingUp = false;
-            }
-
-            i++;
 
             this.flipTurn();
         }
@@ -42,17 +37,12 @@ class Game(private val player1: ClientHandler, private val player2: ClientHandle
 
     private fun handlePart1Turn() {
         val player = getClientHandler(turn);
-        val topBlock = if (turn == PlayerColor.PLAYER_BLUE) board.topBlueBlock else board.topOrangeBlock;
+        player.write(PACKET_TYPES.GIVE_SETUP_TURN.giveSetupToString(board, turn));
 
-        val message = PACKET_TYPES.GIVE_SETUP_TURN.setupTurnToString(board.getNames(board.unpickedBuildings), topBlock!!);
-
-
-        player.write(message);
-
-        val response_split = player.read().split(":");
-        when (response_split[0]) {
+        val responseSplit = player.read().split(":");
+        when (responseSplit[0]) {
             "PICKED_BUILDING" -> {
-                val buildingName = PlacableName.valueOf(response_split[1]);
+                val buildingName = PlacableName.valueOf(responseSplit[1]);
                 board.pickBuilding(buildingName, turn);
                 println("Player %s picked building: %s".format(turn, buildingName.name));
             }
@@ -79,5 +69,6 @@ class Game(private val player1: ClientHandler, private val player2: ClientHandle
             PlayerColor.PLAYER_BLUE -> PlayerColor.PLAYER_ORANGE
             PlayerColor.PLAYER_ORANGE -> PlayerColor.PLAYER_BLUE
         }
+        println("Changed turn to: %s".format(turn.name));
     }
 }

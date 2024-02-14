@@ -10,7 +10,7 @@ class Client(val serverSocket: Socket, val gui: Gui) {
     val scanner = Scanner(this.serverSocket.getInputStream());
     val writer = this.serverSocket.getOutputStream();
 
-    val board = Board();
+    var board = Board();
 
     fun run() {
         // First, wait for welcome lobby message
@@ -18,55 +18,51 @@ class Client(val serverSocket: Socket, val gui: Gui) {
             println("You joined the lobby!")
         } else {
             println("Error: Expected different packet");
+            return;
         }
 
-        val gameCards = PACKET_TYPES.GAME_STARTED.gameStartFromString(this.read());
-        this.board.selectedCardsForGame = gameCards;
+        this.board = PACKET_TYPES.GAME_STARTED.gameStartedFromString(this.read());
+        this.gui.updateBoard(board);
+        println("Game started and received state!");
 
-        println("Game started with %d cards".format(this.board.selectedCardsForGame.size));
+        handleSetup();
 
-        var i = 0;
 
-        while (true) {
-            gui.updateBoard(board);
+    }
 
-            // Read turn message
-            val turnMsg = this.read();
-            println("[%d]".format(i));
-            i++;
+    private fun handleSetup() {
+        var isInSetup = true;
+        while (isInSetup) {
 
-            when (turnMsg.split(":")[0]) {
+            val msg = this.read();
+
+            when (msg.split("=")[0]) {
                 PACKET_TYPES.GIVE_SETUP_TURN.name -> {
                     println("We received a SETUP turn request. Enter your response:");
-                    handleTurnPart1(turnMsg);
+                    handleTurnPart1(msg);
                 }
-                PACKET_TYPES.GIVE_PLAY_TURN.name -> {
-                    println("We received a PLAY turn request. Enter your response:");
-                    val response = readln();
-                    this.write(response);
+                PACKET_TYPES.SETUP_FINISHED.name -> {
+                    println("Setup finished according to server");
+                    isInSetup = false;
                 }
-                else -> {
-                    println("Received other message:");
-                    println("'%s'".format(turnMsg));
-                }
+                else -> throw Exception("Did not expect this message: %s".format(msg));
             }
         }
+        println("Leaving setup function...");
     }
 
     private fun handleTurnPart1(msg: String) {
-        val buildingsAndBlock = PACKET_TYPES.GIVE_SETUP_TURN.setupTurnFromString(msg);
+        this.board = PACKET_TYPES.GIVE_SETUP_TURN.giveSetupFromString(msg);
+        this.gui.updateBoard(this.board);
 
-        board.updateUnpickedBuildings(buildingsAndBlock.first);
-        board.topBlueBlock = buildingsAndBlock.second;
-
-        board.lastMove = null;
-        gui.updateBoard(board);
         gui.allowTurnPart1();
-        // Wait for
+        // Wait for last move to be present
         while (board.lastMove == null) {
             Thread.sleep(100);
         }
+
         gui.updateBoard(board);
+
         println("Detected being picked: '%s'".format(board.lastMove));
         write(board.lastMove as String);
         return;

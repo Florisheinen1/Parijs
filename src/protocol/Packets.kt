@@ -1,9 +1,6 @@
 package protocol
 
-import game.Block
-import game.Cards
-import game.PlacableName
-import game.Tile
+import game.*
 import java.nio.charset.Charset
 import java.util.*
 
@@ -11,53 +8,82 @@ enum class PACKET_TYPES {
     WELCOME_IN_LOBBY,
     GAME_STARTED,
     GIVE_SETUP_TURN,
-    GIVE_PLAY_TURN,
+    SETUP_FINISHED,
     ;
 
-    fun gameStartToString(selectedCards: List<Cards>): String {
-        return GAME_STARTED.name + ":" + "[%s,%s,%s,%s,%s,%s,%s,%s]".format(
-                selectedCards[0],
-                selectedCards[1],
-                selectedCards[2],
-                selectedCards[3],
-                selectedCards[4],
-                selectedCards[5],
-                selectedCards[6],
-                selectedCards[7],
-        );
+    fun gameStartedToString(board: Board, playerColor: PlayerColor): String {
+        return GAME_STARTED.name + "=" + boardToString(board, playerColor);
     }
-    fun gameStartFromString(s: String): Vector<Cards> {
+    fun gameStartedFromString(s: String): Board {
+        return boardFromString(s.removePrefix(GAME_STARTED.name + "="));
+    }
+
+    fun giveSetupToString(board: Board, playerColor: PlayerColor): String {
+        return GIVE_SETUP_TURN.name + "=" + boardToString(board, playerColor);
+    }
+    fun giveSetupFromString(s: String): Board {
+        return boardFromString(s.removePrefix(GIVE_SETUP_TURN.name + "="));
+    }
+
+    // ================ HELPERS ==================== //
+
+    private fun boardToString(board: Board, playerColor: PlayerColor): String {
+        var unpickedBuildings = placeNamesToString(board.getNames(board.unpickedBuildings));
+        var bluePickedBuildings = placeNamesToString(board.getNames(board.blueInventoryBuildings));
+        var orangePickedBuildings = placeNamesToString(board.getNames(board.orangeInventoryBuildings));
+
+        if (playerColor == PlayerColor.PLAYER_ORANGE) {
+            val tmp = bluePickedBuildings;
+            bluePickedBuildings = orangePickedBuildings;
+            orangePickedBuildings = tmp;
+        }
+
+        var cards = cardsToString(board.selectedCardsForGame);
+        var pickedBlock = blockToString(if (playerColor==PlayerColor.PLAYER_BLUE) board.topBlueBlock else board.topOrangeBlock);
+
+        return arrayOf(
+                unpickedBuildings,
+                bluePickedBuildings,
+                orangePickedBuildings,
+                cards,
+                pickedBlock,
+        ).joinToString(separator = ":");
+    }
+
+    private fun boardFromString(s: String): Board {
+        val board = Board()
+
+        val spl = s.split(":");
+        board.unpickedBuildings = board.getPlacablesFromNames(placeNamesFromString(spl[0]));
+        board.blueInventoryBuildings = board.getPlacablesFromNames(placeNamesFromString(spl[1]));
+        board.orangeInventoryBuildings = board.getPlacablesFromNames(placeNamesFromString(spl[2]));
+        board.selectedCardsForGame = cardsFromString(spl[3]);
+        board.topBlueBlock = blockFromString(spl[4]);
+        return board;
+    }
+
+    private fun cardsToString(cards: List<Cards>): String {
+        return cards.joinToString(prefix = "[", separator = ",", postfix = "]");
+    }
+    private fun cardsFromString(s: String): Vector<Cards> {
+        val trim = s.take(s.length-1).drop(1).split(",");
         val cards = Vector<Cards>();
-        val without_s = s.removePrefix(GAME_STARTED.name + ":");
-        val cardStrings = without_s.take(without_s.length-1).drop(1).split(",");
-        for (cardString in cardStrings) {
-            cards.add(Cards.valueOf(cardString));
+        for (cardStr in trim) {
+            cards.add(Cards.valueOf(cardStr));
         }
         return cards;
     }
 
-    fun setupTurnToString(unpickedBuildings: List<PlacableName>, openBlock: Block): String {
-        val buildings = placeNamesToString(unpickedBuildings);
-        val block = blockToString(openBlock);
-
-        return GIVE_SETUP_TURN.name + ":" + buildings + ":" + block
+    fun blockToString(b: Block?): String {
+        return if (b == null) {
+            ""
+        } else {
+            "[%s,%s,%s,%s]".format(b.topLeft, b.topRight, b.bottomLeft, b.bottomRight);
+        }
     }
 
-    fun setupTurnFromString(s: String): Pair<Vector<PlacableName>, Block> {
-        println("Parsing turn: %s".format(s));
-        val spl = s.split(":");
-        val names = placeNamesFromString(spl[1]);
-        val block = blockFromString(spl[2]);
-
-        return Pair(names, block);
-    }
-
-    fun blockToString(b: Block): String {
-        return "[%s,%s,%s,%s]".format(b.topLeft, b.topRight, b.bottomLeft, b.bottomRight);
-    }
-
-    fun blockFromString(s: String): Block {
-        println("Parsing: %s".format(s));
+    private fun blockFromString(s: String): Block? {
+        if (s.isEmpty()) return null;
         val vals = s.take(s.length - 1).drop(1).split(",");
         return Block(
                 Tile.valueOf(vals[0]),
@@ -67,7 +93,7 @@ enum class PACKET_TYPES {
         );
     }
 
-    fun placeNamesToString(placeNames: List<PlacableName>): String {
+    private fun placeNamesToString(placeNames: List<PlacableName>): String {
         var placesString = "[";
         for (placeName in placeNames) {
             placesString += ",";
@@ -76,7 +102,7 @@ enum class PACKET_TYPES {
         placesString += "]";
         return placesString;
     }
-    fun placeNamesFromString(s: String): Vector<PlacableName> {
+    private fun placeNamesFromString(s: String): Vector<PlacableName> {
         val placeNames = Vector<PlacableName>();
 
         val placeNameStrings = s.take(s.length - 1).drop(2).split(",");
@@ -89,46 +115,4 @@ enum class PACKET_TYPES {
 
         return placeNames;
     }
-//    private fun blockToString()
 }
-
-val SEPARATOR: Char = ':';
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-interface Packet {
-    fun toBytes(): ByteArray;
-    fun fromLine(line: String): Packet;
-}
-
-//class WelcomeInLobby: Packet {
-//    val ID: String = "WELCOME_IN_LOBBY";
-//    override fun toBytes(): ByteArray {
-//        return this.ID.toByteArray(Charset.defaultCharset());
-//    }
-//    override fun fromLine(line: String): WelcomeInLobby {
-//        if (!line.equals(this.ID)) {
-//
-//        }
-//    }
-//}
-
-//class ChatPacket(val message: String) : Packet {
-//    override val PREFIX = "CHAT";
-//
-//    override fun toBytes(): ByteArray {
-//        val data = this.PREFIX + SEPARATOR + message;
-//        return data.toByteArray(Charset.defaultCharset());
-//    }
-//}
