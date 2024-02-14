@@ -24,6 +24,9 @@ import javax.swing.text.BadLocationException
 import kotlin.concurrent.thread
 import kotlin.math.abs
 
+var SELECTED_SCREEN_BUILDING: ScreenBuilding? = null;
+var ALLOW_TURN_1: Boolean = false;
+
 class Gui : JFrame() {
 
     val drawingCanvas = DrawingCanvas();
@@ -31,15 +34,6 @@ class Gui : JFrame() {
 
     fun run() {
         isRunning = true;
-        // First the dialog part
-        val dialog = StartDialog();
-        thread { dialog.run() };
-        while (!dialog.submitted) {
-            // wait
-            Thread.sleep(100);
-        }
-        dialog.dispose();
-        println("Server Address: %s:%d".format(dialog.serverAddress, dialog.serverPort));
 
         // Now the rest
         this.add(this.drawingCanvas);
@@ -74,7 +68,12 @@ class Gui : JFrame() {
     }
 
     fun updateBoard(board: Board) {
-        this.drawingCanvas.screenBoard.updateBoard(board);
+        this.drawingCanvas.updateBoard(board);
+        println("Board updated in GUI");
+    }
+
+    fun allowTurnPart1() {
+        ALLOW_TURN_1 = true;
     }
 }
 
@@ -82,7 +81,24 @@ abstract class ParisScreenElement : MouseAdapter(), MouseMotionListener {
     abstract fun draw(g: Graphics, screenSize: Vec2);
 }
 
-class ScreenBuilding(val building: Placable) : MouseAdapter(), MouseMotionListener {
+class UnpickedScreenBuilding(building: Placable, val board: Board) : ScreenBuilding(building) {
+    override fun mouseClicked(e: MouseEvent?) {
+        if (!ALLOW_TURN_1) {
+            return;
+        }
+        if (e != null) {
+            if (super.contains(e.x, e.y)) {
+                println("Me got clicked: %s".format(building.name.name));
+                board.pickBuilding(building.name, PlayerColor.PLAYER_BLUE);
+                ALLOW_TURN_1 = false;
+            } else if (SELECTED_SCREEN_BUILDING == this) {
+//                SELECTED_SCREEN_BUILDING = null;
+            }
+        }
+    }
+}
+
+abstract class ScreenBuilding(val building: Placable) : MouseAdapter(), MouseMotionListener {
     var isHovered = false;
     val borderColor = Color.WHITE;
     val borderColorHover = Color.BLACK;
@@ -93,7 +109,10 @@ class ScreenBuilding(val building: Placable) : MouseAdapter(), MouseMotionListen
     var unitSize = 10;
 
     fun draw(g: Graphics) {
-        val border_color = if (isHovered) borderColorHover else borderColor;
+        var border_color = if (isHovered) borderColorHover else borderColor;
+        if (SELECTED_SCREEN_BUILDING == this) {
+            border_color = borderColorSelected;
+        }
 
         val BORDER_WIDTH = 5; // pixels
 
@@ -122,7 +141,7 @@ class ScreenBuilding(val building: Placable) : MouseAdapter(), MouseMotionListen
         }
     }
 
-    private fun contains(x: Int, y: Int): Boolean {
+    fun contains(x: Int, y: Int): Boolean {
         for (rectOrigin in building.parts) {
             val left = origin.x + rectOrigin.x * unitSize;
             val top = origin.y + rectOrigin.y * unitSize;
@@ -163,14 +182,13 @@ class ScreenUnpickedBuildingArea(board: Board) : ParisScreenElement() {
     private val UNIT_SIZE = AREA_SIZE / 7;
     private val yOffset = 650;
 
-    private val unpickedScreenBuildings = Vector<ScreenBuilding>();
+    private val unpickedScreenBuildings = Vector<UnpickedScreenBuilding>();
 
     init {
         updateBoard(board);
     }
 
     override fun draw(g: Graphics, screenSize: Vec2) {
-        println("Drawing unpicked buildings...")
         val origin = Vec2(screenSize.x / 2 - AREA_SIZE / 2, yOffset);
 
         g.color = Color(100, 20, 20);
@@ -189,11 +207,17 @@ class ScreenUnpickedBuildingArea(board: Board) : ParisScreenElement() {
         }
     }
 
+    override fun mouseClicked(e: MouseEvent?) {
+        for (unpickedScreenBuilding in unpickedScreenBuildings) {
+            unpickedScreenBuilding.mouseClicked(e);
+        }
+    }
+
     fun updateBoard(board: Board) {
         unpickedScreenBuildings.clear();
 
         for (unpickedBuilding in board.unpickedBuildings) {
-            val screenBuilding = ScreenBuilding(unpickedBuilding.deepClone());
+            val screenBuilding = UnpickedScreenBuilding(unpickedBuilding.deepClone(), board);
             unpickedScreenBuildings.addElement(screenBuilding);
         }
     }
@@ -242,7 +266,8 @@ class ScreenBoard(var board: Board) : ParisScreenElement() {
                     Tile.BLUE -> Color.BLUE
                     Tile.ORANGE -> Color.ORANGE
                     Tile.LANTERN -> Color.YELLOW
-                    Tile.BRICKS -> Color.GRAY;
+                    Tile.BRICKS -> Color.GRAY
+                    Tile.SHARED -> Color.PINK
                 }
 
                 g.fillRect(tileX+1, tileY+1, unitSize-2, unitSize-2);
@@ -278,16 +303,22 @@ class DrawingCanvas : JPanel() {
 
         this.addMouseMotionListener(unpickedBuildings);
         this.addMouseMotionListener(screenBoard);
+        this.addMouseListener(unpickedBuildings);
+        this.addMouseListener(screenBoard);
     }
 
     override fun paintComponent(g: Graphics) {
-        println("Redrawing...");
         g.color = Color.GRAY;
         g.fillRect(0, 0, this.width, this.height);
 
         for (screenBoi in this.screenElements) {
             screenBoi.draw(g, Vec2(width, height));
         }
+    }
+
+    fun updateBoard(board: Board) {
+        screenBoard.updateBoard(board);
+        unpickedBuildings.updateBoard(board);
     }
 
 
@@ -310,7 +341,6 @@ class DrawingCanvas : JPanel() {
 //            this.drawBuilding(g, unpickedBuilding, unitSize, Vec2(screenOriginX, screenOriginY), Color.GREEN, Color.WHITE);
 //        }
 //    }
-
 }
 
 class StartDialog : JDialog() {

@@ -2,31 +2,59 @@ package game
 
 import java.security.InvalidParameterException
 import java.util.Vector
-
+import java.util.*;
 
 class Board {
     var SIZE = 8;
 
     val gamePhase = GamePhase.PART_1;
 
-    // Part 0: Pick the Cards that we will use in the game
-    val selectedCardsForGame = Vector<Cards>();
+    // ============= Part 0: Pick the Cards that we will use in the game ======================== //
+    var selectedCardsForGame = Vector<Cards>();
+
+    var unplacedBlueBlocks = Vector<Block>();
+    var unplacedOrangeBlocks = Vector<Block>();
+    var topOrangeBlock: Block? = null;
+    var topBlueBlock: Block? = null;
+
     fun selectCardsForGame(): Vector<Cards> {
         val cards = Vector<Cards>();
-        cards.addAll(Cards.values().toList().shuffled().take(8));
+        cards.addAll(Cards.entries.shuffled().take(8));
         return cards;
     }
 
-    // Part 1
+    fun selectBlockListsForGame(player: PlayerColor): Vector<Block> {
+        val blocks = Vector<Block>();
+        for (block in ALL_BLOCKS_OF_BLUE) {
+            when (player) {
+                PlayerColor.PLAYER_BLUE -> blocks.add(block)
+                PlayerColor.PLAYER_ORANGE -> blocks.add(block.getInverted())
+            }
+        }
+        return Vector(blocks.shuffled());
+    }
+
+    fun initializePartZero() { // Meant for the server
+        unplacedBlueBlocks = selectBlockListsForGame(PlayerColor.PLAYER_BLUE);
+        unplacedOrangeBlocks = selectBlockListsForGame(PlayerColor.PLAYER_ORANGE);
+
+        selectedCardsForGame = selectCardsForGame();
+
+        topBlueBlock = unplacedBlueBlocks.firstElement();
+        topOrangeBlock = unplacedOrangeBlocks.firstElement();
+    }
+    fun setupPartZero(topBlock: Block, cards: Vector<Cards>) {
+        selectedCardsForGame = cards;
+        topBlueBlock = topBlock;
+    }
+
+    // ============= Part 1: Handle part one ======================== //
     val tiles: Array<Tile> = Array<Tile>(SIZE*SIZE) {Tile.BRICKS};
 
-    val unpickedBuildings: Vector<Placable> = this.getAllBuildings();
+    var lastMove: String? = null;
+    var unpickedBuildings = this.getAllBuildings();
     val blueInventoryBuildings = Vector<Placable>();
     val orangeInventoryBuildings = Vector<Placable>();
-    val topBlueBlock: Block? = null;
-    val blueBlocksLeft: Int = 8;
-    val topOrangeBlock: Block? = null;
-    val orangeBlocksLeft: Int = 8;
 
     fun placeBlock(block: Block, pos: Vec2) {
         if (
@@ -42,6 +70,7 @@ class Board {
             this.setTile(block.bottomLeft, pos.x, pos.y+1);
             this.setTile(block.bottomRight, pos.x+1, pos.y+1);
         }
+        lastMove = "PLACED_BLOCK:";
     }
 
     fun pickBuilding(buildingName: PlacableName, playerColor: PlayerColor) {
@@ -61,6 +90,25 @@ class Board {
             PlayerColor.PLAYER_BLUE -> this.blueInventoryBuildings
         };
         targetInventory.addElement(target);
+        lastMove = "PICKED_BUILDING:%s".format(buildingName.name);
+    }
+
+    fun updateUnpickedBuildings(names: Vector<PlacableName>) {
+        this.unpickedBuildings.clear();
+
+        for (building in ALL_PLACABLES) {
+            if (names.contains(building.name)) {
+                unpickedBuildings.add(building);
+            }
+        }
+    }
+
+    fun getNames(placables: List<Placable>): Vector<PlacableName> {
+        val names = Vector<PlacableName>();
+        for (placable in placables) {
+            names.add(placable.name);
+        }
+        return names;
     }
 
 
@@ -143,16 +191,34 @@ enum class Cards {
 enum class Tile {
     BLUE,
     ORANGE,
+    SHARED,
     LANTERN,
-    BRICKS
+    BRICKS;
+
+    fun getInverted(): Tile {
+        return when (this) {
+            BLUE -> ORANGE
+            ORANGE -> BLUE
+            else -> this
+        }
+    }
 }
 
 class Block(
     val topLeft: Tile,
     val topRight: Tile,
     val bottomLeft: Tile,
-    val bottomRight: Tile
-);
+    val bottomRight: Tile,
+) {
+    fun getInverted(): Block {
+        return Block(
+            topLeft.getInverted(),
+            topRight.getInverted(),
+            bottomLeft.getInverted(),
+            bottomRight.getInverted()
+        );
+    }
+};
 
 enum class Direction {
     NORTH,
@@ -269,6 +335,17 @@ val ALL_BUILDING_NAMES: Array<PlacableName> = arrayOf(
         PlacableName.CROSS,
         PlacableName.LINE,
         PlacableName.CHONK,
+)
+
+val ALL_BLOCKS_OF_BLUE: Array<Block> = arrayOf(
+        Block(Tile.ORANGE, Tile.BLUE, Tile.SHARED, Tile.BLUE),
+        Block(Tile.SHARED, Tile.BLUE, Tile.BLUE, Tile.ORANGE),
+        Block(Tile.BLUE, Tile.LANTERN, Tile.BLUE, Tile.ORANGE),
+        Block(Tile.LANTERN, Tile.BLUE, Tile.ORANGE, Tile.SHARED),
+        Block(Tile.SHARED, Tile.BLUE, Tile.ORANGE, Tile.BLUE),
+        Block(Tile.BLUE, Tile.LANTERN, Tile.ORANGE, Tile.BLUE),
+        Block(Tile.LANTERN, Tile.BLUE, Tile.BLUE, Tile.SHARED),
+        Block(Tile.BLUE, Tile.BLUE, Tile.BLUE, Tile.ORANGE)
 )
 
 val ALL_PLACABLES: Array<Placable> = arrayOf(

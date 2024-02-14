@@ -15,17 +15,14 @@ class Client(val serverSocket: Socket, val gui: Gui) {
     fun run() {
         // First, wait for welcome lobby message
         if (this.read() == PACKET_TYPES.WELCOME_IN_LOBBY.name) {
-            println("You joined the lobby!!!!")
+            println("You joined the lobby!")
         } else {
             println("Error: Expected different packet");
         }
 
-        // Then, wait for game start message
-        if (this.read() == PACKET_TYPES.GAME_STARTED.name) {
-            println("The game has started!");
-        } else {
-            println("Error: Expected different packet2");
-        }
+        val gameCards = PACKET_TYPES.GAME_STARTED.gameStartFromString(this.read());
+        this.board.selectedCardsForGame = gameCards;
+        println("Game started!");
 
         var i = 0;
 
@@ -37,12 +34,10 @@ class Client(val serverSocket: Socket, val gui: Gui) {
             println("[%d]".format(i));
             i++;
 
-            when (turnMsg) {
+            when (turnMsg.split(":")[0]) {
                 PACKET_TYPES.GIVE_SETUP_TURN.name -> {
                     println("We received a SETUP turn request. Enter your response:");
-                    val response = readln();
-                    println("Response: '%s'".format(response));
-                    this.write(response)
+                    handleTurnPart1(turnMsg);
                 }
                 PACKET_TYPES.GIVE_PLAY_TURN.name -> {
                     println("We received a PLAY turn request. Enter your response:");
@@ -55,6 +50,25 @@ class Client(val serverSocket: Socket, val gui: Gui) {
                 }
             }
         }
+    }
+
+    private fun handleTurnPart1(msg: String) {
+        val buildingsAndBlock = PACKET_TYPES.GIVE_SETUP_TURN.setupTurnFromString(msg);
+
+        board.updateUnpickedBuildings(buildingsAndBlock.first);
+        board.topBlueBlock = buildingsAndBlock.second;
+
+        board.lastMove = null;
+        gui.updateBoard(board);
+        gui.allowTurnPart1();
+        // Wait for
+        while (board.lastMove == null) {
+            Thread.sleep(100);
+        }
+        gui.updateBoard(board);
+        println("Detected being picked: '%s'".format(board.lastMove));
+        write(board.lastMove as String);
+        return;
     }
 
     private fun read(): String {
