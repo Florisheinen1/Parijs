@@ -13,6 +13,13 @@ enum class PACKET_TYPES {
     SETUP_FINISHED,
     ;
 
+    fun setupFinishedToString(board: Board, playerColor: PlayerColor): String {
+        return SETUP_FINISHED.name + "=" + boardToString(board, playerColor);
+    }
+    fun setupFinishedFromString(s: String): Board {
+        return boardFromString(s.removePrefix(SETUP_FINISHED.name + "="));
+    }
+
     fun gameStartedToString(board: Board, playerColor: PlayerColor): String {
         return GAME_STARTED.name + "=" + boardToString(board, playerColor);
     }

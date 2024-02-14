@@ -27,6 +27,9 @@ class Game(private val player1: ClientHandler, private val player2: ClientHandle
         flipTurn();
         println("Starting the second round with: %s".format(turn.name));
 
+        bluePlayer.write(PACKET_TYPES.SETUP_FINISHED.setupFinishedToString(board, PlayerColor.PLAYER_BLUE));
+        orangePlayer.write(PACKET_TYPES.SETUP_FINISHED.setupFinishedToString(board, PlayerColor.PLAYER_ORANGE));
+
         runPart2();
         println("This game is over!");
     }
