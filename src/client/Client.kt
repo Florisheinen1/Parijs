@@ -22,7 +22,8 @@ class Client(val serverSocket: Socket, val gui: Gui) {
 
         val gameCards = PACKET_TYPES.GAME_STARTED.gameStartFromString(this.read());
         this.board.selectedCardsForGame = gameCards;
-        println("Game started!");
+
+        println("Game started with %d cards".format(this.board.selectedCardsForGame.size));
 
         var i = 0;
 

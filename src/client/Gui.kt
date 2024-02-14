@@ -97,6 +97,17 @@ class UnpickedScreenBuilding(building: Placable, val board: Board) : ScreenBuild
         }
     }
 }
+class PickedScreenBuilding(building: Placable, val board: Board) : ScreenBuilding(building) {
+    override fun mouseClicked(e: MouseEvent?) {
+        if (e != null) {
+            if (super.contains(e.x, e.y)) {
+                println("Picked me got clicked: %s".format(building.name.name));
+            } else if (SELECTED_SCREEN_BUILDING == this) {
+//                SELECTED_SCREEN_BUILDING = null;
+            }
+        }
+    }
+}
 
 abstract class ScreenBuilding(val building: Placable) : MouseAdapter(), MouseMotionListener {
     var isHovered = false;
@@ -174,6 +185,76 @@ abstract class ScreenBuilding(val building: Placable) : MouseAdapter(), MouseMot
             }
         }
         return neighbors;
+    }
+}
+
+class ScreenPickedBuildingArea(board: Board, val playerColor: PlayerColor) : ParisScreenElement() {
+    private val AREA_SIZE = 420;
+    private val UNIT_SIZE = AREA_SIZE / 7;
+    private val yOffset = 30;
+    private val xOffset = if (playerColor == PlayerColor.PLAYER_BLUE) -600 else 600;
+
+    private val pickedScreenBuildings = Vector<PickedScreenBuilding>();
+
+    init {
+        updateBoard(board);
+    }
+
+    override fun draw(g: Graphics, screenSize: Vec2) {
+        val origin = Vec2(screenSize.x / 2 - AREA_SIZE / 2 - xOffset, yOffset);
+
+        g.color = Color(100, 20, 20);
+        g.fillRect(origin.x, origin.y, AREA_SIZE, AREA_SIZE + UNIT_SIZE)
+
+        for (pickedBuilding in this.pickedScreenBuildings) {
+            pickedBuilding.unitSize = UNIT_SIZE;
+            pickedBuilding.origin = getBuildingOrigin(origin, UNIT_SIZE, pickedBuilding.building.name);
+            pickedBuilding.draw(g);
+        }
+    }
+
+    override fun mouseMoved(e: MouseEvent?) {
+        for (pickedScreenBuilding in pickedScreenBuildings) {
+            pickedScreenBuilding.mouseMoved(e);
+        }
+    }
+    override fun mouseClicked(e: MouseEvent?) {
+        for (pickedScreenBuilding in pickedScreenBuildings) {
+            pickedScreenBuilding.mouseClicked(e);
+        }
+    }
+
+    fun getBuildingOrigin(origin: Vec2, unitSize: Int, name: PlacableName): Vec2 {
+        val relativeUnits = when (name) {
+            PlacableName.SMILE -> Vec2(0, 0)
+            PlacableName.BIG_L -> Vec2(4, 0)
+            PlacableName.SMALL_L -> Vec2(5, 1)
+            PlacableName.BIG_T -> Vec2(4, 2)
+            PlacableName.SMALL_T -> Vec2(2, 1)
+            PlacableName.CORNER -> Vec2(0, 1)
+            PlacableName.SQUARE -> Vec2(0, 3)
+            PlacableName.STAIRS -> Vec2(1, 3)
+            PlacableName.ZIGZAG -> Vec2(0, 5)
+            PlacableName.CROSS -> Vec2(2, 5)
+            PlacableName.LINE -> Vec2(4, 5)
+            PlacableName.CHONK -> Vec2(4, 6)
+            else -> throw Exception("Failed to draw non-building");
+        };
+        return Vec2(
+                origin.x + relativeUnits.x * unitSize,
+                origin.y + relativeUnits.y * unitSize
+        );
+    }
+
+    fun updateBoard(board: Board) {
+        pickedScreenBuildings.clear();
+
+        val targetList = if (playerColor == PlayerColor.PLAYER_BLUE) board.blueInventoryBuildings else board.orangeInventoryBuildings;
+
+        for (pickedBuilding in targetList) {
+            val screenBuilding = PickedScreenBuilding(pickedBuilding.deepClone(), board);
+            pickedScreenBuildings.addElement(screenBuilding);
+        }
     }
 }
 
@@ -280,12 +361,105 @@ class ScreenBoard(var board: Board) : ParisScreenElement() {
     }
 }
 
+class ScreenCard(val card: Cards, val unitSize: Int) : MouseAdapter(), MouseMotionListener {
+    var isHovered = false;
+
+    var origin = Vec2(0, 0);
+
+    fun draw(g: Graphics) {
+        g.color = if (isHovered) Color.BLACK else Color.WHITE;
+        g.fillRect(origin.x, origin.y, unitSize*2, unitSize);
+
+        val border = 5;
+        g.color = Color.DARK_GRAY;
+        g.fillRect(origin.x + border, origin.y + border, (unitSize-border)*2, unitSize-border*2);
+    }
+
+    fun contains(x: Int, y: Int): Boolean {
+        val left = origin.x
+        val right = left + 2 * unitSize;
+        val top = origin.y;
+        val bottom = top + unitSize;
+        return x in left..right && y in top..bottom;
+    }
+
+    override fun mouseMoved(e: MouseEvent?) {
+        if (e != null) {
+            isHovered = contains(e.x, e.y);
+        }
+    }
+}
+
+class CardsArea(var board: Board) : ParisScreenElement() {
+    val AREA_SIZE = 500;
+    var origin = Vec2(0, 0);
+
+    val screenCards = Vector<ScreenCard>();
+
+    init {
+        updateBoard(board);
+    }
+
+    override fun draw(g: Graphics, screenSize: Vec2) {
+        this.origin = Vec2(
+                (screenSize.x / 2) - (AREA_SIZE / 2) - 600,
+                650
+        );
+
+        g.color = Color.PINK;
+        g.fillRect(origin.x, origin.y, AREA_SIZE, AREA_SIZE);
+
+        val cardUnitSize = AREA_SIZE / 4;
+        var row = 0;
+        var col = 0;
+        for (screenCard in this.screenCards) {
+            screenCard.origin = Vec2(
+                    this.origin.x + col * cardUnitSize * 2,
+                    this.origin.y + row * cardUnitSize
+            );
+            if (col == 0) {
+                col = 1
+            } else {
+                row++;
+                col = 0;
+            }
+
+
+            screenCard.draw(g);
+        }
+    }
+
+    override fun mouseMoved(e: MouseEvent?) {
+        for (screenCard in screenCards) {
+            screenCard.mouseMoved(e);
+        }
+    }
+
+    fun updateBoard(newBoard: Board) {
+        this.board = newBoard;
+
+        this.screenCards.clear();
+
+        val cardUnitSize = AREA_SIZE / 4;
+
+        if (board.selectedCardsForGame.size == 0) {return}
+
+        for (card in board.selectedCardsForGame) {
+            screenCards.add(ScreenCard(card, cardUnitSize));
+        }
+    }
+}
+
 class DrawingCanvas : JPanel() {
 
     var screenElements = Vector<ParisScreenElement>();
 
     var screenBoard = ScreenBoard(Board());
     var unpickedBuildings = ScreenUnpickedBuildingArea(Board());
+    var bluePickedBuildings = ScreenPickedBuildingArea(Board(), PlayerColor.PLAYER_BLUE);
+    var orangePickedBuildings = ScreenPickedBuildingArea(Board(), PlayerColor.PLAYER_ORANGE);
+    var cardsArea = CardsArea(Board());
+
 
     init {
 //        println("Board width: %d, %d".format(BOARD_ORIGIN.x, BOARD_ORIGIN.y));
@@ -300,11 +474,20 @@ class DrawingCanvas : JPanel() {
 //        }
         screenElements.addElement(this.screenBoard);
         screenElements.addElement(this.unpickedBuildings);
+        screenElements.addElement(this.cardsArea);
+        screenElements.addElement(this.bluePickedBuildings);
+        screenElements.addElement(this.orangePickedBuildings);
 
         this.addMouseMotionListener(unpickedBuildings);
         this.addMouseMotionListener(screenBoard);
+        this.addMouseMotionListener(cardsArea);
+        this.addMouseMotionListener(bluePickedBuildings);
+        this.addMouseMotionListener(orangePickedBuildings);
         this.addMouseListener(unpickedBuildings);
         this.addMouseListener(screenBoard);
+        this.addMouseListener(cardsArea);
+        this.addMouseListener(bluePickedBuildings);
+        this.addMouseListener(orangePickedBuildings);
     }
 
     override fun paintComponent(g: Graphics) {
@@ -319,6 +502,9 @@ class DrawingCanvas : JPanel() {
     fun updateBoard(board: Board) {
         screenBoard.updateBoard(board);
         unpickedBuildings.updateBoard(board);
+        cardsArea.updateBoard(board);
+        bluePickedBuildings.updateBoard(board);
+        orangePickedBuildings.updateBoard(board);
     }
 
 
