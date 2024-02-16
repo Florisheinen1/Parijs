@@ -26,8 +26,6 @@ class Client(val serverSocket: Socket, val gui: Gui) {
         println("Game started and received state!");
 
         handleSetup();
-
-
     }
 
     private fun handleSetup() {
@@ -55,16 +53,17 @@ class Client(val serverSocket: Socket, val gui: Gui) {
         this.board = PACKET_TYPES.GIVE_SETUP_TURN.giveSetupFromString(msg);
         this.gui.updateBoard(this.board);
 
-        gui.allowTurnPart1();
+//        gui.allowTurnPart1();
         // Wait for last move to be present
-        while (board.lastMove == null) {
-            Thread.sleep(100);
-        }
+        while (true) {}
+//        while (board.lastMove == null) {
+//            Thread.sleep(100);
+//        }
 
         gui.updateBoard(board);
 
-        println("Detected being picked: '%s'".format(board.lastMove));
-        write(board.lastMove as String);
+//        println("Detected being picked: '%s'".format(board.lastMove));
+//        write(board.lastMove as String);
 
         // Wait for confirmation:
         val response = read();

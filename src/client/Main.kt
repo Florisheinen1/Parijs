@@ -1,5 +1,6 @@
 package client
 
+import game.Direction
 import java.awt.event.WindowEvent
 import java.net.ConnectException
 import java.net.InetAddress

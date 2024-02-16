@@ -5,21 +5,21 @@ import protocol.PACKET_TYPES
 import java.util.*
 
 class Game(private val player1: ClientHandler, private val player2: ClientHandler) {
-    var turn = PlayerColor.PLAYER_BLUE;
+    var turn = PlayerColor.BLUE;
 
     val board = Board();
 
-    var lastToPlaceBlock = PlayerColor.PLAYER_BLUE;
+    var lastToPlaceBlock = PlayerColor.BLUE;
 
     fun run() {
         println("Started the game!");
         board.initializePartZero();
 
-        val bluePlayer = getClientHandler(PlayerColor.PLAYER_BLUE);
-        bluePlayer.write(PACKET_TYPES.GAME_STARTED.gameStartedToString(board, PlayerColor.PLAYER_BLUE));
+        val bluePlayer = getClientHandler(PlayerColor.BLUE);
+        bluePlayer.write(PACKET_TYPES.GAME_STARTED.gameStartedToString(board, PlayerColor.BLUE));
 
-        val orangePlayer = getClientHandler(PlayerColor.PLAYER_ORANGE);
-        orangePlayer.write(PACKET_TYPES.GAME_STARTED.gameStartedToString(board, PlayerColor.PLAYER_ORANGE));
+        val orangePlayer = getClientHandler(PlayerColor.ORANGE);
+        orangePlayer.write(PACKET_TYPES.GAME_STARTED.gameStartedToString(board, PlayerColor.ORANGE));
 
         runPart1();
 
@@ -27,8 +27,8 @@ class Game(private val player1: ClientHandler, private val player2: ClientHandle
         flipTurn();
         println("Starting the second round with: %s".format(turn.name));
 
-        bluePlayer.write(PACKET_TYPES.SETUP_FINISHED.setupFinishedToString(board, PlayerColor.PLAYER_BLUE));
-        orangePlayer.write(PACKET_TYPES.SETUP_FINISHED.setupFinishedToString(board, PlayerColor.PLAYER_ORANGE));
+        bluePlayer.write(PACKET_TYPES.SETUP_FINISHED.setupFinishedToString(board, PlayerColor.BLUE));
+        orangePlayer.write(PACKET_TYPES.SETUP_FINISHED.setupFinishedToString(board, PlayerColor.ORANGE));
 
         runPart2();
         println("This game is over!");
@@ -52,7 +52,7 @@ class Game(private val player1: ClientHandler, private val player2: ClientHandle
         val responseSplit = player.read().split(":");
         when (responseSplit[0]) {
             "PICKED_BUILDING" -> {
-                val buildingName = PlacableName.valueOf(responseSplit[1]);
+                val buildingName = BuildingName.valueOf(responseSplit[1]);
                 board.pickBuilding(buildingName, turn);
                 println("Player %s picked building: %s".format(turn, buildingName.name));
             }
@@ -62,8 +62,8 @@ class Game(private val player1: ClientHandler, private val player2: ClientHandle
                     responseSplit[1].toInt(),
                     responseSplit[2].toInt()
                 );
-                val block = if (turn == PlayerColor.PLAYER_BLUE) board.topBlueBlock else board.topOrangeBlock;
-                board.placeBlock(block!!, pos, turn);
+                val block = if (turn == PlayerColor.BLUE) board.topBlueBlock else board.topOrangeBlock;
+                board.placeTileBlock(block!!, pos, turn);
                 lastToPlaceBlock = turn;
             }
             "PASS" -> {
@@ -87,15 +87,15 @@ class Game(private val player1: ClientHandler, private val player2: ClientHandle
 
     private fun getClientHandler(playerColor: PlayerColor): ClientHandler {
         return when (playerColor) {
-            PlayerColor.PLAYER_BLUE -> player1
-            PlayerColor.PLAYER_ORANGE -> player2
+            PlayerColor.BLUE -> player1
+            PlayerColor.ORANGE -> player2
         }
     }
 
     private fun flipTurn() {
         this.turn = when (this.turn) {
-            PlayerColor.PLAYER_BLUE -> PlayerColor.PLAYER_ORANGE
-            PlayerColor.PLAYER_ORANGE -> PlayerColor.PLAYER_BLUE
+            PlayerColor.BLUE -> PlayerColor.ORANGE
+            PlayerColor.ORANGE -> PlayerColor.BLUE
         }
         println("Changed turn to: %s".format(turn.name));
     }

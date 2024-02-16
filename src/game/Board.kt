@@ -4,19 +4,18 @@ import protocol.PACKET_TYPES
 import java.security.InvalidParameterException
 import java.util.Vector
 import java.util.*;
+import kotlin.math.abs
 
-class Board {
+open class Board {
     var SIZE = 8;
 
-    val gamePhase = GamePhase.PART_1;
-
     // ============= Part 0: Pick the Cards that we will use in the game ======================== //
-    var selectedCardsForGame = Vector<Cards>();
+    var ingameCards = Vector<Cards>();
 
-    var unplacedBlueBlocks = Vector<Block>();
-    var unplacedOrangeBlocks = Vector<Block>();
-    var topOrangeBlock: Block? = null;
-    var topBlueBlock: Block? = null;
+    var unplacedBlueBlocks = Vector<TileBlock>();
+    var unplacedOrangeBlocks = Vector<TileBlock>();
+    var topOrangeBlock: TileBlock? = null;
+    var topBlueBlock: TileBlock? = null;
 
     fun selectCardsForGame(): Vector<Cards> {
         val cards = Vector<Cards>();
@@ -24,40 +23,39 @@ class Board {
         return cards;
     }
 
-    fun selectBlockListsForGame(player: PlayerColor): Vector<Block> {
-        val blocks = Vector<Block>();
+    fun selectBlockListsForGame(player: PlayerColor): Vector<TileBlock> {
+        val blocks = Vector<TileBlock>();
         for (block in ALL_BLOCKS_OF_BLUE) {
             when (player) {
-                PlayerColor.PLAYER_BLUE -> blocks.add(block)
-                PlayerColor.PLAYER_ORANGE -> blocks.add(block.getInverted())
+                PlayerColor.BLUE -> blocks.add(block.copy())
+                PlayerColor.ORANGE -> {
+                    val copy = block.copy();
+                    copy.invert();
+                    blocks.add(copy)
+                }
             }
         }
         return Vector(blocks.shuffled());
     }
 
     fun initializePartZero() { // Meant for the server
-        unplacedBlueBlocks = selectBlockListsForGame(PlayerColor.PLAYER_BLUE);
-        unplacedOrangeBlocks = selectBlockListsForGame(PlayerColor.PLAYER_ORANGE);
+        unplacedBlueBlocks = selectBlockListsForGame(PlayerColor.BLUE);
+        unplacedOrangeBlocks = selectBlockListsForGame(PlayerColor.ORANGE);
 
-        selectedCardsForGame = selectCardsForGame();
+        ingameCards = selectCardsForGame();
 
         topBlueBlock = unplacedBlueBlocks.firstElement();
         topOrangeBlock = unplacedOrangeBlocks.firstElement();
     }
-    fun setupPartZero(topBlock: Block, cards: Vector<Cards>) {
-        selectedCardsForGame = cards;
-        topBlueBlock = topBlock;
-    }
 
     // ============= Part 1: Handle part one ======================== //
-    var tiles: Array<Tile> = Array<Tile>(SIZE*SIZE) {Tile.BRICKS};
+    var tiles = Array<Tile>(SIZE*SIZE) {Tile.BRICKS};
 
-    var lastMove: String? = null;
-    var unpickedBuildings = this.getAllBuildings();
-    var blueInventoryBuildings = Vector<Placable>();
-    var orangeInventoryBuildings = Vector<Placable>();
+    var unpickedBuildings = Vector(BuildingName.entries);
+    var blueInventoryBuildings = Vector<BuildingName>();
+    var orangeInventoryBuildings = Vector<BuildingName>();
 
-    fun placeBlock(block: Block, pos: Vec2, player: PlayerColor) {
+    fun placeTileBlock(block: TileBlock, pos: Vec2, player: PlayerColor) {
         if (
                 pos.x < 0 || pos.x >= SIZE ||
                 pos.y < 0 || pos.y >= SIZE ||
@@ -73,73 +71,26 @@ class Board {
         }
 
         when (player) {
-            PlayerColor.PLAYER_ORANGE -> {
+            PlayerColor.ORANGE -> {
                 unplacedOrangeBlocks.removeElement(topOrangeBlock);
                 topOrangeBlock = if (unplacedOrangeBlocks.isEmpty()) null else  unplacedOrangeBlocks[0];
             }
-            PlayerColor.PLAYER_BLUE -> {
+            PlayerColor.BLUE -> {
                 unplacedBlueBlocks.removeElement(topBlueBlock)
                 topBlueBlock = if (unplacedBlueBlocks.isEmpty()) null else unplacedBlueBlocks[0];
             }
         }
-
-        lastMove = "PLACED_BLOCK:" + pos.x + ":" + pos.y;
     }
 
-    fun pickBuilding(buildingName: PlacableName, playerColor: PlayerColor) {
-        var target: Placable? = null;
-        for (building in unpickedBuildings) {
-            if (building.name == buildingName) {
-                target = building;
-                break;
-            }
-        }
-        if (target == null) {
-            throw Exception("Building was not found!");
-        }
-        unpickedBuildings.removeElement(target);
+    fun pickBuilding(buildingName: BuildingName, playerColor: PlayerColor) {
+        this.unpickedBuildings.remove(buildingName);
+
         val targetInventory = when (playerColor) {
-            PlayerColor.PLAYER_ORANGE -> this.orangeInventoryBuildings
-            PlayerColor.PLAYER_BLUE -> this.blueInventoryBuildings
+            PlayerColor.ORANGE -> this.orangeInventoryBuildings
+            PlayerColor.BLUE -> this.blueInventoryBuildings
         };
-        targetInventory.addElement(target);
-        lastMove = "PICKED_BUILDING:%s".format(buildingName.name);
+        targetInventory.addElement(buildingName);
     }
-
-    fun passTurn() {
-        lastMove = "PASS";
-    }
-
-    fun updateUnpickedBuildings(names: Vector<PlacableName>) {
-        this.unpickedBuildings.clear();
-
-        for (building in ALL_PLACABLES) {
-            if (names.contains(building.name)) {
-                unpickedBuildings.add(building);
-            }
-        }
-    }
-
-    fun getNames(placables: List<Placable>): Vector<PlacableName> {
-        val names = Vector<PlacableName>();
-        for (placable in placables) {
-            names.add(placable.name);
-        }
-        return names;
-    }
-    fun getPlacablesFromNames(names: List<PlacableName>): Vector<Placable> {
-        val placables = Vector<Placable>();
-        for (placable in ALL_PLACABLES) {
-            if (names.contains(placable.name)) {
-                placables.add(placable);
-            }
-        }
-        return placables;
-    }
-
-
-
-
 
     fun getTile(x: Int, y: Int): Tile {
         val index = y * SIZE + x;
@@ -149,31 +100,45 @@ class Board {
         val index = y * SIZE + x;
         tiles[index] = tile;
     }
+}
 
+enum class Cards {
+    LEVITATION, // Switch building
+    METROPOLITAN, // Cover street lantern
+    JARDIN_DES_PLANTES, // Normal building
+    SACRE_COEUR, // No point reduction of unplaced buildings
+    LE_PEINTRE, // The painter
+    CHARTIER, // Mixed color
+    BOUQUINISTES_SUR_LA_SEINE, // Expansion
+    LAMPADAIRE, // Lantern
+    MOULIN_ROUGE, // Dancer
+    FONTAINE_DES_MERS, // Decoration
+    LE_PENSEUR, // Le penseur
+    LA_GRANDE_LUMIERE, // Big lantern
+}
 
-    private fun selectObjectsForGame() {
-        for (obj in ALL_PLACABLES) {
-            val buildings = arrayOf(
-                    PlacableName.SMILE,
-                    PlacableName.BIG_L,
-                    PlacableName.SMALL_L,
-                    PlacableName.BIG_T,
-                    PlacableName.SMALL_T,
-                    PlacableName.CORNER,
-                    PlacableName.SQUARE,
-                    PlacableName.STAIRS,
-            )
-        }
+enum class PlayerColor {
+    BLUE,
+    ORANGE;
+
+    fun invert(): PlayerColor {
+        return if (this == BLUE) ORANGE else BLUE;
     }
+}
 
-    private fun getAllBuildings(): Vector<Placable> {
-        val buildings = Vector<Placable>();
-        for (placable in ALL_PLACABLES) {
-            if (ALL_BUILDING_NAMES.contains(placable.name)) {
-                buildings.addElement(placable);
-            }
+enum class Direction {
+    NORTH,
+    EAST,
+    SOUTH,
+    WEST;
+
+    fun rotate(clockwise: Boolean): Direction {
+        return when (this) {
+            NORTH -> if (clockwise) EAST else WEST;
+            EAST -> if (clockwise) SOUTH else NORTH;
+            SOUTH -> if (clockwise) WEST else EAST;
+            WEST -> if (clockwise) NORTH else SOUTH;
         }
-        return buildings;
     }
 }
 
@@ -193,26 +158,6 @@ class Vec2(var x: Int, var y: Int) {
     }
 }
 
-enum class GamePhase {
-    PART_1,
-    PART_2,
-}
-
-enum class Cards {
-    LEVITATION, // Switch building
-    METROPOLITAN, // Cover street lantern
-    JARDIN_DES_PLANTES, // Normal building
-    SACRE_COEUR, // No point reduction of unplaced buildings
-    LE_PEINTRE, // The painter
-    CHARTIER, // Mixed color
-    BOUQUINISTES_SUR_LA_SEINE, // Expansion
-    LAMPADAIRE, // Lantern
-    MOULIN_ROUGE, // Dancer
-    FONTAINE_DES_MERS, // Decoration
-    LE_PENSEUR, // Le penseur
-    LA_GRANDE_LUMIERE, // Big lantern
-}
-
 enum class Tile {
     BLUE,
     ORANGE,
@@ -220,7 +165,7 @@ enum class Tile {
     LANTERN,
     BRICKS;
 
-    fun getInverted(): Tile {
+    fun invert(): Tile {
         return when (this) {
             BLUE -> ORANGE
             ORANGE -> BLUE
@@ -229,45 +174,7 @@ enum class Tile {
     }
 }
 
-class Block(
-    val topLeft: Tile,
-    val topRight: Tile,
-    val bottomLeft: Tile,
-    val bottomRight: Tile,
-) {
-    fun getInverted(): Block {
-        return Block(
-            topLeft.getInverted(),
-            topRight.getInverted(),
-            bottomLeft.getInverted(),
-            bottomRight.getInverted()
-        );
-    }
-};
-
-enum class Direction {
-    NORTH,
-    EAST,
-    SOUTH,
-    WEST;
-
-    fun rotate(clockwise: Boolean) {
-        when (this) {
-            NORTH -> if (clockwise) EAST else WEST;
-            EAST -> if (clockwise) SOUTH else NORTH;
-            SOUTH -> if (clockwise) WEST else EAST;
-            WEST -> if (clockwise) NORTH else SOUTH;
-        }
-    }
-}
-
-enum class PlayerColor {
-    PLAYER_BLUE,
-    PLAYER_ORANGE,
-}
-
-enum class PlacableName {
-    // Buildings
+enum class BuildingName {
     SMILE,
     BIG_L,
     SMALL_L,
@@ -280,223 +187,222 @@ enum class PlacableName {
     CROSS,
     LINE,
     CHONK,
-
-    // Special pieces
-    PAINTER,
-    DANCER,
-//    MIXED_FIELD,
-    FOUNTAIN,
-    PENSEUR,
-    LANTERN,
-    BIG_LANTERN,
-    GARDEN,
-    EXPANSION
 }
 
-class Placable(
-        val name: PlacableName,
-        val parts: Vector<Vec2>,
-        val direction: Direction,
-        val owner: PlayerColor?
-) {
-    fun rotate(clockwise: Boolean) {
-        for (i in 0..parts.size) {
-            parts[i].rotate(clockwise);
-        }
+class Building(
+        val name: BuildingName,
+        direction: Direction,
+        parts: Array<Vec2>,
+        val owner: PlayerColor? = null) : Placeable(direction, parts) {
 
-        var minX: Int? = null;
-        var minY: Int? = null;
-        for (pos in parts) {
-            if (minX == null || pos.x < minX) {
-                minX = pos.x;
+    companion object {
+        fun fromName(name: BuildingName): Building {
+            return when (name) {
+                BuildingName.SMILE -> Building(
+                        name,
+                        Direction.NORTH,
+                        arrayOf(
+                                Vec2(0, 0),
+                                Vec2(0, 1),
+                                Vec2(1, 0),
+                                Vec2(2, 0),
+                                Vec2(3, 0),
+                                Vec2(3, 1)
+                        )
+                )
+                BuildingName.BIG_L -> Building(
+                        name,
+                        Direction.NORTH,
+                        arrayOf(
+                                Vec2(0, 0),
+                                Vec2(0, 1),
+                                Vec2(0, 2),
+                                Vec2(0, 3),
+                                Vec2(1, 0),
+                                Vec2(2, 0),
+                        )
+                )
+                BuildingName.SMALL_L -> Building(
+                        name,
+                        Direction.NORTH,
+                        arrayOf(
+                                Vec2(0, 0),
+                                Vec2(1, 0),
+                                Vec2(1, 1),
+                                Vec2(1, 2),
+                        )
+                )
+                BuildingName.BIG_T -> Building(
+                        name,
+                        Direction.NORTH,
+                        arrayOf(
+                                Vec2(1, 0),
+                                Vec2(1, 1),
+                                Vec2(1, 2),
+                                Vec2(0, 2),
+                                Vec2(2, 2),
+                        )
+                )
+                BuildingName.SMALL_T -> Building(
+                        name,
+                        Direction.NORTH,
+                        arrayOf(
+                                Vec2(0, 0),
+                                Vec2(0, 1),
+                                Vec2(0, 2),
+                                Vec2(1, 1),
+                        )
+                )
+                BuildingName.CORNER -> Building(
+                        name,
+                        Direction.NORTH,
+                        arrayOf(
+                                Vec2(1, 1),
+                                Vec2(1, 0),
+                                Vec2(0, 1),
+                        )
+                )
+                BuildingName.SQUARE -> Building(
+                        name,
+                        Direction.NORTH,
+                        arrayOf(
+                                Vec2(0, 0),
+                                Vec2(1, 0),
+                                Vec2(0, 1),
+                                Vec2(1, 1),
+                        )
+                )
+                BuildingName.STAIRS -> Building(
+                        name,
+                        Direction.NORTH,
+                        arrayOf(
+                                Vec2(0, 2),
+                                Vec2(1, 2),
+                                Vec2(1, 1),
+                                Vec2(2, 1),
+                                Vec2(2, 0),
+                        )
+                )
+                BuildingName.ZIGZAG -> Building(
+                        name,
+                        Direction.NORTH,
+                        arrayOf(
+                                Vec2(0, 0),
+                                Vec2(0, 1),
+                                Vec2(1, 1),
+                                Vec2(1, 2),
+                        )
+                )
+                BuildingName.CROSS -> Building(
+                        name,
+                        Direction.NORTH,
+                        arrayOf(
+                                Vec2(1, 0),
+                                Vec2(1, 1),
+                                Vec2(0, 1),
+                                Vec2(1, 2),
+                                Vec2(2, 1),
+                        )
+                )
+                BuildingName.LINE -> Building(
+                        name,
+                        Direction.NORTH,
+                        arrayOf(
+                                Vec2(0, 0),
+                                Vec2(1, 0),
+                                Vec2(2, 0),
+                        )
+                )
+                BuildingName.CHONK -> Building(
+                        name,
+                        Direction.NORTH,
+                        arrayOf(
+                                Vec2(0, 1),
+                                Vec2(1, 0),
+                                Vec2(1, 1),
+                                Vec2(2, 0),
+                                Vec2(2, 1),
+                        )
+                )
             }
-            if (minY == null || pos.y < minY) {
-                minY = pos.y;
-            }
         }
-
-        val distanceToOrigin = Vec2(-minX!!, -minY!!);
-        this.move(distanceToOrigin);
-        this.direction.rotate(clockwise);
-    }
-
-    fun move(dist: Vec2) {
-        for (pos in this.parts) {
-            pos.x += pos.x;
-            pos.y += pos.y;
-        }
-    }
-
-    fun deepClone(): Placable {
-        val copyParts = Vector<Vec2>();
-        for (part in parts) {
-            copyParts.addElement(Vec2(part.x, part.y));
-        }
-        val cloned = Placable(
-                name,
-                copyParts,
-                direction,
-                owner);
-        return cloned;
     }
 }
 
-fun <T> toVec(arr: Array<T>): Vector<T> {
-    val vec = Vector<T>();
-    vec.addAll(arr.asList());
-    return vec;
+// A square block that consists of 4 tiles
+class TileBlock(
+        direction: Direction,
+        var topLeft: Tile,
+        var topRight: Tile,
+        var bottomLeft: Tile,
+        var bottomRight: Tile) : Placeable(direction, arrayOf(
+            Vec2(0, 0),
+            Vec2(1, 0),
+            Vec2(0, 1),
+            Vec2(1, 1),
+        )) {
+    override fun rotate(clockwise: Boolean) {
+        val temporaryTile = if (clockwise) this.topRight else this.bottomLeft;
+
+        this.topLeft = if (clockwise) this.bottomLeft else topRight;
+        this.topRight = if (clockwise) this.topLeft else bottomRight;
+        this.bottomLeft = if (clockwise) this.bottomRight else topLeft;
+        this.bottomRight = temporaryTile;
+
+        super.rotate(clockwise);
+    }
+    fun invert() {
+        this.topLeft = this.topLeft.invert();
+        this.topRight = this.topRight.invert();
+        this.bottomLeft = this.bottomLeft.invert();
+        this.bottomRight = this.bottomRight.invert();
+    }
+
+    fun copy(): TileBlock {
+        return TileBlock(
+            this.direction,
+            this.topLeft,
+            this.topRight,
+            this.bottomLeft,
+            this.bottomRight
+        );
+    }
 }
 
-val ALL_BUILDING_NAMES: Array<PlacableName> = arrayOf(
-        PlacableName.SMILE,
-        PlacableName.BIG_L,
-        PlacableName.SMALL_L,
-        PlacableName.BIG_T,
-        PlacableName.SMALL_T,
-        PlacableName.CORNER,
-        PlacableName.SQUARE,
-        PlacableName.STAIRS,
-        PlacableName.ZIGZAG,
-        PlacableName.CROSS,
-        PlacableName.LINE,
-        PlacableName.CHONK,
+// Class to resemble anything that can be placed on the board
+abstract class Placeable(var direction: Direction = Direction.NORTH, var parts: Array<Vec2>) {
+    protected open fun rotate(clockwise: Boolean) {
+        this.direction = this.direction.rotate(clockwise);
+        for (part in this.parts) {
+            part.rotate(clockwise);
+        }
+    }
+
+    fun getDimension(): Vec2 {
+        var minX = this.parts[0].x;
+        var minY = this.parts[0].y;
+        var maxX = minX;
+        var maxY = minY;
+        for (part in this.parts) {
+            if (part.x < minX) minX = part.x;
+            if (part.x > maxX) maxX = part.x;
+            if (part.y < minY) minY = part.y;
+            if (part.y > maxY) maxY = part.y;
+        }
+        return Vec2(
+            abs(maxX - minX) + 1,
+            abs(maxY - minY) + 1,
+        )
+    }
+}
+
+val ALL_BLOCKS_OF_BLUE: Array<TileBlock> = arrayOf(
+        TileBlock(Direction.NORTH, Tile.ORANGE, Tile.BLUE, Tile.SHARED, Tile.BLUE),
+        TileBlock(Direction.NORTH, Tile.SHARED, Tile.BLUE, Tile.BLUE, Tile.ORANGE),
+        TileBlock(Direction.NORTH, Tile.BLUE, Tile.LANTERN, Tile.BLUE, Tile.ORANGE),
+        TileBlock(Direction.NORTH, Tile.LANTERN, Tile.BLUE, Tile.ORANGE, Tile.SHARED),
+        TileBlock(Direction.NORTH, Tile.SHARED, Tile.BLUE, Tile.ORANGE, Tile.BLUE),
+        TileBlock(Direction.NORTH, Tile.BLUE, Tile.LANTERN, Tile.ORANGE, Tile.BLUE),
+        TileBlock(Direction.NORTH, Tile.LANTERN, Tile.BLUE, Tile.BLUE, Tile.SHARED),
+        TileBlock(Direction.NORTH, Tile.BLUE, Tile.BLUE, Tile.BLUE, Tile.ORANGE)
 )
-
-val ALL_BLOCKS_OF_BLUE: Array<Block> = arrayOf(
-        Block(Tile.ORANGE, Tile.BLUE, Tile.SHARED, Tile.BLUE),
-        Block(Tile.SHARED, Tile.BLUE, Tile.BLUE, Tile.ORANGE),
-        Block(Tile.BLUE, Tile.LANTERN, Tile.BLUE, Tile.ORANGE),
-        Block(Tile.LANTERN, Tile.BLUE, Tile.ORANGE, Tile.SHARED),
-        Block(Tile.SHARED, Tile.BLUE, Tile.ORANGE, Tile.BLUE),
-        Block(Tile.BLUE, Tile.LANTERN, Tile.ORANGE, Tile.BLUE),
-        Block(Tile.LANTERN, Tile.BLUE, Tile.BLUE, Tile.SHARED),
-        Block(Tile.BLUE, Tile.BLUE, Tile.BLUE, Tile.ORANGE)
-)
-
-val ALL_PLACABLES: Array<Placable> = arrayOf(
-    Placable(PlacableName.SMILE, toVec(arrayOf(
-            Vec2(0, 0),
-            Vec2(0, 1),
-            Vec2(1, 0),
-            Vec2(2, 0),
-            Vec2(3, 0),
-            Vec2(3, 1)
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.BIG_L, toVec(arrayOf(
-            Vec2(0, 0),
-            Vec2(0, 1),
-            Vec2(0, 2),
-            Vec2(0, 3),
-            Vec2(1, 0),
-            Vec2(2, 0),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.SMALL_L, toVec(arrayOf(
-            Vec2(0, 0),
-            Vec2(1, 0),
-            Vec2(1, 1),
-            Vec2(1, 2),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.BIG_T, toVec(arrayOf(
-            Vec2(1, 0),
-            Vec2(1, 1),
-            Vec2(1, 2),
-            Vec2(0, 2),
-            Vec2(2, 2),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.SMALL_T, toVec(arrayOf(
-            Vec2(0, 0),
-            Vec2(0, 1),
-            Vec2(0, 2),
-            Vec2(1, 1),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.CORNER, toVec(arrayOf(
-            Vec2(1, 1),
-            Vec2(1, 0),
-            Vec2(0, 1),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.SQUARE, toVec(arrayOf(
-            Vec2(0, 0),
-            Vec2(1, 0),
-            Vec2(0, 1),
-            Vec2(1, 1),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.STAIRS, toVec(arrayOf(
-            Vec2(0, 2),
-            Vec2(1, 2),
-            Vec2(1, 1),
-            Vec2(2, 1),
-            Vec2(2, 0),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.ZIGZAG, toVec(arrayOf(
-            Vec2(0, 0),
-            Vec2(0, 1),
-            Vec2(1, 1),
-            Vec2(1, 2),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.CROSS, toVec(arrayOf(
-            Vec2(1, 0),
-            Vec2(1, 1),
-            Vec2(0, 1),
-            Vec2(1, 2),
-            Vec2(2, 1),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.LINE, toVec(arrayOf(
-            Vec2(0, 0),
-            Vec2(1, 0),
-            Vec2(2, 0),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.CHONK, toVec(arrayOf(
-            Vec2(0, 1),
-            Vec2(1, 0),
-            Vec2(1, 1),
-            Vec2(2, 0),
-            Vec2(2, 1),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.PAINTER, toVec(arrayOf(
-            Vec2(0, 0),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.DANCER, toVec(arrayOf(
-            Vec2(0, 0),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.FOUNTAIN, toVec(arrayOf(
-            Vec2(0, 0),
-            Vec2(1, 0),
-            Vec2(1, 1),
-            Vec2(1, 2),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.PENSEUR, toVec(arrayOf(
-            Vec2(0, 0),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.LANTERN, toVec(arrayOf(
-            Vec2(0, 0),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.BIG_LANTERN, toVec(arrayOf(
-            Vec2(0, 0),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.GARDEN, toVec(arrayOf(
-            Vec2(0, 0),
-            Vec2(1, 0),
-    )), Direction.NORTH, null),
-
-    Placable(PlacableName.EXPANSION, toVec(arrayOf(
-            Vec2(0, 0),
-    )), Direction.NORTH, null),
-);

@@ -44,127 +44,113 @@ enum class PACKET_TYPES {
     // ================ HELPERS ==================== //
 
     private fun boardToString(board: Board, playerColor: PlayerColor): String {
-        var unpickedBuildings = placeNamesToString(board.getNames(board.unpickedBuildings));
-        var bluePickedBuildings = placeNamesToString(board.getNames(board.blueInventoryBuildings));
-        var orangePickedBuildings = placeNamesToString(board.getNames(board.orangeInventoryBuildings));
-
-        if (playerColor == PlayerColor.PLAYER_ORANGE) {
-            val tmp = bluePickedBuildings;
-            bluePickedBuildings = orangePickedBuildings;
-            orangePickedBuildings = tmp;
-        }
-
-        var cards = cardsToString(board.selectedCardsForGame);
-        var pickedBlock = if (playerColor==PlayerColor.PLAYER_BLUE) board.topBlueBlock else board.topOrangeBlock;
-        var pickedBlockString: String = "";
-        if (pickedBlock != null) {
-            pickedBlockString = blockToString(if (playerColor == PlayerColor.PLAYER_ORANGE) pickedBlock.getInverted() else pickedBlock);
-        }
-
-        var tiles = tilesToString(board.tiles.toList(), playerColor);
-
-        return arrayOf(
-                unpickedBuildings,
-                bluePickedBuildings,
-                orangePickedBuildings,
-                cards,
-                pickedBlockString,
-                tiles,
-        ).joinToString(separator = ":");
+//        var unpickedBuildings = placeNamesToString(board.getNames(board.unpickedBuildings));
+//        var bluePickedBuildings = placeNamesToString(board.getNames(board.blueInventoryBuildings));
+//        var orangePickedBuildings = placeNamesToString(board.getNames(board.orangeInventoryBuildings));
+//
+//        if (playerColor == PlayerColor.PLAYER_ORANGE) {
+//            val tmp = bluePickedBuildings;
+//            bluePickedBuildings = orangePickedBuildings;
+//            orangePickedBuildings = tmp;
+//        }
+//
+//        var cards = cardsToString(board.selectedCardsForGame);
+//        var pickedBlock = if (playerColor==PlayerColor.PLAYER_BLUE) board.topBlueBlock else board.topOrangeBlock;
+//        var pickedBlockString: String = "";
+//        if (pickedBlock != null) {
+//            pickedBlockString = blockToString(if (playerColor == PlayerColor.PLAYER_ORANGE) pickedBlock.getInverted() else pickedBlock);
+//        }
+//
+//        var tiles = tilesToString(board.tiles.toList(), playerColor);
+//
+//        return arrayOf(
+//                unpickedBuildings,
+//                bluePickedBuildings,
+//                orangePickedBuildings,
+//                cards,
+//                pickedBlockString,
+//                tiles,
+//        ).joinToString(separator = ":");
+        return "";
     }
 
     private fun boardFromString(s: String): Board {
-        val board = Board()
-
-        val spl = s.split(":");
-        board.unpickedBuildings = board.getPlacablesFromNames(placeNamesFromString(spl[0]));
-        board.blueInventoryBuildings = board.getPlacablesFromNames(placeNamesFromString(spl[1]));
-        board.orangeInventoryBuildings = board.getPlacablesFromNames(placeNamesFromString(spl[2]));
-        board.selectedCardsForGame = cardsFromString(spl[3]);
-        board.topBlueBlock = blockFromString(spl[4]);
-
-        val tiles = tilesFromString(spl[5]);
-
-        for (i in 0..63) {
-            board.tiles[i] = tiles[i];
-        }
-
-        return board;
+//        val board = Board()
+//
+//        val spl = s.split(":");
+//        board.unpickedBuildings = board.getPlacablesFromNames(placeNamesFromString(spl[0]));
+//        board.blueInventoryBuildings = board.getPlacablesFromNames(placeNamesFromString(spl[1]));
+//        board.orangeInventoryBuildings = board.getPlacablesFromNames(placeNamesFromString(spl[2]));
+//        board.selectedCardsForGame = cardsFromString(spl[3]);
+//        board.topBlueBlock = blockFromString(spl[4]);
+//
+//        val tiles = tilesFromString(spl[5]);
+//
+//        for (i in 0..63) {
+//            board.tiles[i] = tiles[i];
+//        }
+//
+//        return board;
+        return Board();
     }
 
-    private fun tilesToString(tiles: List<Tile>, playerColor: PlayerColor): String {
-        val shouldInvert = playerColor == PlayerColor.PLAYER_ORANGE;
-        val correctTileStrings = Vector<String>();
-
-        for (tile in tiles) {
-            if (shouldInvert) {
-                correctTileStrings.add(tile.getInverted().name);
-            } else {
-                correctTileStrings.add(tile.name);
-            }
-        }
-        return correctTileStrings.joinToString(prefix = "[", separator = ",", postfix = "]");
-    }
-    private fun tilesFromString(s: String): Vector<Tile> {
-        val tileStrings = s.take(s.length-1).drop(1).split(",");
-        val tiles = Vector<Tile>();
-        for (tileString in tileStrings) {
-            tiles.add(Tile.valueOf(tileString));
-        }
-        return tiles;
-    }
-
-    private fun cardsToString(cards: List<Cards>): String {
-        return cards.joinToString(prefix = "[", separator = ",", postfix = "]");
-    }
-    private fun cardsFromString(s: String): Vector<Cards> {
-        val trim = s.take(s.length-1).drop(1).split(",");
-        val cards = Vector<Cards>();
-        for (cardStr in trim) {
-            cards.add(Cards.valueOf(cardStr));
-        }
-        return cards;
-    }
-
-    fun blockToString(b: Block?): String {
-        return if (b == null) {
-            ""
-        } else {
-            "[%s,%s,%s,%s]".format(b.topLeft, b.topRight, b.bottomLeft, b.bottomRight);
-        }
-    }
-
-    fun blockFromString(s: String): Block? {
-        if (s.isEmpty()) return null;
-        val vals = s.take(s.length - 1).drop(1).split(",");
-        return Block(
-                Tile.valueOf(vals[0]),
-                Tile.valueOf(vals[1]),
-                Tile.valueOf(vals[2]),
-                Tile.valueOf(vals[3]),
-        );
-    }
-
-    private fun placeNamesToString(placeNames: List<PlacableName>): String {
-        var placesString = "[";
-        for (placeName in placeNames) {
-            placesString += ",";
-            placesString += placeName.name
-        }
-        placesString += "]";
-        return placesString;
-    }
-    private fun placeNamesFromString(s: String): Vector<PlacableName> {
-        val placeNames = Vector<PlacableName>();
-
-        val placeNameStrings = s.take(s.length - 1).drop(2).split(",");
-        for (placeNameString in placeNameStrings) {
-            if (placeNameString.isEmpty()) {
-                continue;
-            }
-            placeNames.addElement(PlacableName.valueOf(placeNameString));
-        }
-
-        return placeNames;
-    }
+//    private fun tilesToString(tiles: List<Tile>, playerColor: PlayerColor): String {
+//        val shouldInvert = playerColor == PlayerColor.PLAYER_ORANGE;
+//        val correctTileStrings = Vector<String>();
+//
+//        for (tile in tiles) {
+//            if (shouldInvert) {
+//                correctTileStrings.add(tile.getInverted().name);
+//            } else {
+//                correctTileStrings.add(tile.name);
+//            }
+//        }
+//        return correctTileStrings.joinToString(prefix = "[", separator = ",", postfix = "]");
+//    }
+//    private fun tilesFromString(s: String): Vector<Tile> {
+//        val tileStrings = s.take(s.length-1).drop(1).split(",");
+//        val tiles = Vector<Tile>();
+//        for (tileString in tileStrings) {
+//            tiles.add(Tile.valueOf(tileString));
+//        }
+//        return tiles;
+//    }
+//
+//    private fun cardsToString(cards: List<Cards>): String {
+//        return cards.joinToString(prefix = "[", separator = ",", postfix = "]");
+//    }
+//    private fun cardsFromString(s: String): Vector<Cards> {
+//        val trim = s.take(s.length-1).drop(1).split(",");
+//        val cards = Vector<Cards>();
+//        for (cardStr in trim) {
+//            cards.add(Cards.valueOf(cardStr));
+//        }
+//        return cards;
+//    }
+//
+//    fun blockToString(b: TileBlock?): String {
+//        return if (b == null) {
+//            ""
+//        } else {
+//            "[%s,%s,%s,%s]".format(b.topLeft, b.topRight, b.bottomLeft, b.bottomRight);
+//        }
+//    }
+//
+//    fun blockFromString(s: String): TileBlock? {
+//        if (s.isEmpty()) return null;
+//        val vals = s.take(s.length - 1).drop(1).split(",");
+//        return TileBlock(
+//                Tile.valueOf(vals[0]),
+//                Tile.valueOf(vals[1]),
+//                Tile.valueOf(vals[2]),
+//                Tile.valueOf(vals[3]),
+//        );
+//    }
+//
+//    fun BuildingNamesFromString(buildings: List<BuildingName>): String {
+//        return ""
+//    }
+//    fun <T> listToString(list: List<T>): String {
+//        return list.joinToString(",", "[", "]", transform = { it.toString() });
+//    }
 }
