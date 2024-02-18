@@ -1,15 +1,12 @@
 package game
 
-import protocol.PACKET_TYPES
 import java.security.InvalidParameterException
 import java.util.Vector
-import java.util.*;
 import kotlin.math.abs
 
 open class Board {
     var SIZE = 8;
 
-    // ============= Part 0: Pick the Cards that we will use in the game ======================== //
     var ingameCards = Vector<Cards>();
 
     var unplacedBlueBlocks = Vector<TileBlock>();
@@ -17,38 +14,6 @@ open class Board {
     var topOrangeBlock: TileBlock? = null;
     var topBlueBlock: TileBlock? = null;
 
-    fun selectCardsForGame(): Vector<Cards> {
-        val cards = Vector<Cards>();
-        cards.addAll(Cards.entries.shuffled().take(8));
-        return cards;
-    }
-
-    fun selectBlockListsForGame(player: PlayerColor): Vector<TileBlock> {
-        val blocks = Vector<TileBlock>();
-        for (block in ALL_BLOCKS_OF_BLUE) {
-            when (player) {
-                PlayerColor.BLUE -> blocks.add(block.copy())
-                PlayerColor.ORANGE -> {
-                    val copy = block.copy();
-                    copy.invert();
-                    blocks.add(copy)
-                }
-            }
-        }
-        return Vector(blocks.shuffled());
-    }
-
-    fun initializePartZero() { // Meant for the server
-        unplacedBlueBlocks = selectBlockListsForGame(PlayerColor.BLUE);
-        unplacedOrangeBlocks = selectBlockListsForGame(PlayerColor.ORANGE);
-
-        ingameCards = selectCardsForGame();
-
-        topBlueBlock = unplacedBlueBlocks.firstElement();
-        topOrangeBlock = unplacedOrangeBlocks.firstElement();
-    }
-
-    // ============= Part 1: Handle part one ======================== //
     var tiles = Array<Tile>(SIZE*SIZE) {Tile.BRICKS};
 
     var unpickedBuildings = Vector(BuildingName.entries);
@@ -121,7 +86,7 @@ enum class PlayerColor {
     BLUE,
     ORANGE;
 
-    fun invert(): PlayerColor {
+    fun getInverted(): PlayerColor {
         return if (this == BLUE) ORANGE else BLUE;
     }
 }
@@ -396,13 +361,4 @@ abstract class Placeable(var direction: Direction = Direction.NORTH, var parts: 
     }
 }
 
-val ALL_BLOCKS_OF_BLUE: Array<TileBlock> = arrayOf(
-        TileBlock(Direction.NORTH, Tile.ORANGE, Tile.BLUE, Tile.SHARED, Tile.BLUE),
-        TileBlock(Direction.NORTH, Tile.SHARED, Tile.BLUE, Tile.BLUE, Tile.ORANGE),
-        TileBlock(Direction.NORTH, Tile.BLUE, Tile.LANTERN, Tile.BLUE, Tile.ORANGE),
-        TileBlock(Direction.NORTH, Tile.LANTERN, Tile.BLUE, Tile.ORANGE, Tile.SHARED),
-        TileBlock(Direction.NORTH, Tile.SHARED, Tile.BLUE, Tile.ORANGE, Tile.BLUE),
-        TileBlock(Direction.NORTH, Tile.BLUE, Tile.LANTERN, Tile.ORANGE, Tile.BLUE),
-        TileBlock(Direction.NORTH, Tile.LANTERN, Tile.BLUE, Tile.BLUE, Tile.SHARED),
-        TileBlock(Direction.NORTH, Tile.BLUE, Tile.BLUE, Tile.BLUE, Tile.ORANGE)
-)
+

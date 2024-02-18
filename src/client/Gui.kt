@@ -15,33 +15,85 @@ import javax.swing.JLabel
 import javax.swing.JLayeredPane
 import javax.swing.JPanel
 import javax.swing.JTextField
-import javax.swing.SwingConstants
-import javax.swing.border.EmptyBorder
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import javax.swing.text.BadLocationException
+import kotlin.math.abs
 
-class Gui : JFrame() {
+class Gui : UI() {
 
-    fun run() {
+    val actionStarter = object : UserActionStarter() {
+        override fun fire(action: UserAction) {
+            onUserAction(action);
+        }
+    }
+
+    val window = GameWindow(actionStarter);
+    private var guiPhase: GuiPhase = GuiPhase.Connecting;
+
+    override fun getServerAddress(): Pair<InetAddress, Int> {
+        val startDialog = ConnectDialog();
+        startDialog.run();
+        while (!startDialog.submitted) Thread.sleep(100);
+        startDialog.dispose();
+        return Pair(startDialog.serverAddress!!, startDialog.serverPort!!);
+    }
+
+    override fun updatePhase(newPhase: GuiPhase) {
+        when (newPhase) {
+            is GuiPhase.Connecting -> TODO()
+            is GuiPhase.InLobby -> {
+                if (this.guiPhase is GuiPhase.Connecting) this.openGameWindow();
+            }
+            is GuiPhase.GamePart1 -> {
+                println("Part 1 with turn: %s".format(newPhase.hasTurn));
+            }
+            is GuiPhase.GamePart2 -> TODO()
+            is GuiPhase.GameEnd -> TODO()
+        }
+
+        this.guiPhase = newPhase;
+    }
+
+    override fun updateGameState(board: Board) {
+        val a = { i: Int -> i + 1 }
+    }
+
+    private fun openGameWindow() {
+        println("Opening window");
+        this.window.isVisible = true;
+    }
+}
+
+class GameWindow(private val actionStarter: UserActionStarter) : JFrame() {
+
+    val screenBoard = ScreenBoard();
+    val unpicked = BuildingCollection();
+
+    init {
         this.setTitle("Parijs");
-        this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        this.setDefaultCloseOperation(EXIT_ON_CLOSE);
         this.setSize(900, 700);
-        this.isVisible = true;
         this.layout = BorderLayout(50, 50);
 
-        val board = ScreenBoard();
-        this.add(board, BorderLayout.CENTER);
+        this.add(screenBoard, BorderLayout.CENTER);
 
-        val unpicked = BuildingCollection();
+        unpicked.updateBuildings(BuildingName.entries);
         this.add(unpicked, BorderLayout.SOUTH);
 
+        this.addWindowListener(object : WindowAdapter() {
+            override fun windowClosing(e: WindowEvent?) {
+                super.windowClosing(e)
+                actionStarter.fire(UserAction.CloseWindow);
+            }
+        })
 
         this.pack();
     }
 
-    fun updateBoard(board: Board) {
-        println("Updating board in GUI");
+    fun updateBoard(newBoard: Board) {
+        this.unpicked.updateBuildings(newBoard.unpickedBuildings);
+        this.screenBoard.updateBoard(newBoard);
     }
 }
 
@@ -156,89 +208,132 @@ class ScreenBoard : JLayeredPane() {
         })
     }
 
-    fun updateBoardPosition() {
+    private fun updateBoardPosition() {
         for (layer in this.components) {
             layer.setBounds(width / 2 - BOARD_SIZE / 2, height / 2 - BOARD_SIZE / 2, BOARD_SIZE, BOARD_SIZE);
         }
     }
 
-    override fun paintComponent(g: Graphics?) {
-        if (g == null) {
-            println("G was null");
-            return;
-        }
-        super.paintComponent(g);
-
-//        g.color = Color.MAGENTA;
-//        g.fillRect(0, 0, width, height);
+    fun updateBoard(newBoard: Board) {
+        println("Updating screen board with new board data");
     }
 }
 
 class ScreenBuilding(var building: Building) : JComponent() {
+    val borderSize = 5;
+    var isHovered = false;
+    var isSelected = false;
 
     init {
         this.addComponentListener(object : ComponentAdapter() {
-            override fun componentResized(e: ComponentEvent?) {
-                println("Building resized!");
-            }
+            override fun componentResized(e: ComponentEvent?) {}
         })
         this.addMouseListener(object : MouseAdapter() {
             override fun mouseEntered(e: MouseEvent?) {
-                println("Mouse entered building!");
+                isHovered = true;
+                repaint();
+            }
+            override fun mouseExited(e: MouseEvent?) {
+                isHovered = false;
+                repaint();
             }
 
-            override fun mouseExited(e: MouseEvent?) {
-                println("Mouse left building");
+            override fun mouseClicked(e: MouseEvent?) {
+                if (e != null) {
+                    println("Clicked mouse!");
+                    isSelected = contains(e.x, e.y);
+                    repaint();
+                }
             }
         })
+        this.cursor = Cursor(Cursor.HAND_CURSOR);
     }
 
     override fun contains(x: Int, y: Int): Boolean {
-        return super.contains(x, y)
+        for (rect in this.getScreenRects()) {
+            if (rect.contains(x, y)) return true;
+        }
+        return false;
     }
 
     override fun paintComponent(g: Graphics?) {
         if (g == null) return;
-        super.paintComponent(g)
+        super.paintComponent(g);
 
-        println("Drawing building");
+        for ((rectIndex, rect) in this.getScreenRects().withIndex()) {
+            val neighbors = this.getNeighbourOfRect(rectIndex);
 
-        g.color = Color.GREEN;
-        g.fillRect(0, 0, width, height);
-        drawParts(g);
+            val left = rect.x + if (neighbors.contains(Direction.WEST)) 0 else borderSize;
+            val top = rect.y + if (neighbors.contains(Direction.NORTH)) 0 else borderSize;
+            val right = rect.x + rect.width - if (neighbors.contains(Direction.EAST)) 0 else borderSize;
+            val bottom = rect.y + rect.height - if (neighbors.contains(Direction.SOUTH)) 0  else borderSize;
+
+            // Draw border
+            g.color = if (this.isHovered) Color.BLACK else Color.WHITE;
+           if (this.isSelected) g.color = Color.RED;
+
+            g.fillRect(rect.x, rect.y, rect.width, rect.height);
+
+            // Draw insides
+            g.color = Color.MAGENTA;
+            g.fillRect(left, top, right - left, bottom - top);
+        }
     }
 
-    private fun drawParts(g: Graphics) {
-        g.color = Color.MAGENTA;
+    private fun getScreenRects(): Vector<Rectangle> {
         val relativeDimension = building.getDimension();
-        println("The %s is %d by %d".format(building.name, relativeDimension.x, relativeDimension.y));
         val xUnit = width / relativeDimension.x;
         val yUnit = height / relativeDimension.y;
 
+        val rects = Vector<Rectangle>();
+
         for (part in this.building.parts) {
-            val rectOrigin = Vec2(
+            rects.add(Rectangle(
                     part.x * xUnit,
-                    part.y * yUnit
-            );
-//            println("Size: %d %d".format(width, height));
-//            println("Drawing rect at: %d %d %d %d".format(rectOrigin.x, rectOrigin.y, xUnit/2, yUnit/2));
-            g.fillRect(rectOrigin.x, rectOrigin.y, xUnit, yUnit);
+                    part.y * yUnit,
+                    xUnit,
+                    yUnit,
+            ));
         }
+        return rects;
+    }
+
+    private fun getNeighbourOfRect(rectIndex: Int): Vector<Direction> {
+        val targetRect = this.building.parts[rectIndex];
+        val neighbors = Vector<Direction>();
+        for (other in this.building.parts) {
+            if (targetRect == other) continue;
+
+            val diffX = other.x - targetRect.x;
+            val diffY = other.y - targetRect.y;
+            if (abs(diffX) + abs(diffY) == 1) {
+                // This position is a neighbor!
+                if (diffX == -1) {
+                    neighbors.addElement(Direction.WEST);
+                } else if (diffX == 1) {
+                    neighbors.addElement(Direction.EAST);
+                }
+                if (diffY == 1) {
+                    neighbors.addElement(Direction.SOUTH);
+                } else if (diffY == -1) {
+                    neighbors.addElement(Direction.NORTH);
+                }
+            }
+        }
+        return neighbors;
     }
 }
 
 class BuildingCollection : JPanel(null) {
-    val COLLECTION_WIDTH = 400;
-    val UNIT_SIZE = COLLECTION_WIDTH / 7;
-    val COLLECTION_HEIGHT = UNIT_SIZE * 8;
+    val borderSize = 20;
+    val COLLECTION_WIDTH = 400 + borderSize;
+    val UNIT_SIZE = (COLLECTION_WIDTH - 2*borderSize) / 7;
+    val COLLECTION_HEIGHT = UNIT_SIZE * 8 + 2*borderSize;
 
-//    val buildings = Vector<BuildingName>();
     val screenBuildingChildren = Vector<ScreenBuilding>();
 
     init {
-        this.preferredSize = Dimension(COLLECTION_WIDTH, COLLECTION_HEIGHT);
-
-        this.updateBuildings(Vector(arrayOf(BuildingName.SMILE).toList()));
+        this.preferredSize = Dimension(COLLECTION_WIDTH, COLLECTION_HEIGHT + 50);
 
         this.addComponentListener(object : ComponentAdapter() {
             override fun componentResized(e: ComponentEvent?) {
@@ -248,6 +343,9 @@ class BuildingCollection : JPanel(null) {
     }
 
     private fun updateBuildingPositions() {
+        val collectionLeft = this.width / 2 - COLLECTION_WIDTH / 2 + borderSize;
+        val collectionTop = this.height / 2 - COLLECTION_HEIGHT / 2 + borderSize;
+
         for (screenBuilding in this.screenBuildingChildren) {
             val relativeOffset = getRelativeBuildingUnits(screenBuilding.building.name);
             val absoluteOffset = Vec2(
@@ -261,11 +359,15 @@ class BuildingCollection : JPanel(null) {
                     relativeDimension.y * UNIT_SIZE
             );
 
-            screenBuilding.setBounds(width / 2 - absoluteOffset.x, height / 2 - absoluteOffset.y, absoluteDimension.x, absoluteDimension.y);
+            screenBuilding.setBounds(
+                    collectionLeft + absoluteOffset.x,
+                    collectionTop + absoluteOffset.y,
+                    absoluteDimension.x,
+                    absoluteDimension.y);
         }
     }
 
-    fun updateBuildings(buildings: Vector<BuildingName>) {
+    fun updateBuildings(buildings: List<BuildingName>) {
         this.removeAll();
         this.screenBuildingChildren.clear();
 
@@ -277,7 +379,7 @@ class BuildingCollection : JPanel(null) {
         this.updateBuildingPositions();
     }
 
-    fun getRelativeBuildingUnits(buildingName: BuildingName): Vec2 {
+    private fun getRelativeBuildingUnits(buildingName: BuildingName): Vec2 {
         return when (buildingName) {
             BuildingName.SMILE -> Vec2(0, 0)
             BuildingName.BIG_L -> Vec2(4, 0)
@@ -297,10 +399,12 @@ class BuildingCollection : JPanel(null) {
     override fun paintComponent(g: Graphics?) {
         if (g == null) return;
         super.paintComponent(g)
-        println("Painting collection: %d, %d".format(width, height));
 
-        g.color = Color.CYAN;
-        g.fillRect(0, 0, width, height);
+        val collectionLeft = this.width / 2 - COLLECTION_WIDTH / 2;
+        val collectionTop = this.height / 2 - COLLECTION_HEIGHT / 2;
+
+        g.color = Color(100, 30, 30);
+        g.fillRect(collectionLeft, collectionTop, COLLECTION_WIDTH, COLLECTION_HEIGHT);
     }
 
 
@@ -1015,7 +1119,8 @@ class BuildingCollection : JPanel(null) {
 //    }
 //}
 //
-class StartDialog : JDialog() {
+
+class ConnectDialog : JDialog() {
     var DEFAULT_ADDRESS = "127.0.0.1";
     var DEFAULT_PORT = "39939";
 
@@ -1037,6 +1142,11 @@ class StartDialog : JDialog() {
                 if (serverPort == null) serverPort = DEFAULT_PORT.toInt();
 
                 submitted = true;
+            }
+        })
+        this.addWindowListener(object : WindowAdapter() {
+            override fun windowClosing(e: WindowEvent?) {
+
             }
         })
 
@@ -1094,8 +1204,6 @@ class StartDialog : JDialog() {
         this.add(portLabel);
         this.add(portInput);
         this.add(submit);
-
-
 
         this.isVisible = true;
     }
