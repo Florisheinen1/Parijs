@@ -50,7 +50,11 @@ sealed class UserAction {
     data object Pass : UserAction();
 }
 
-sealed class GuiPhase {
+interface PhaseChangeListener {
+    fun onPhaseChange(newPhase: GuiPhase);
+}
+
+sealed class GuiPhase { // Rename to UIPhase
     data object Connecting : GuiPhase();
     data object InLobby : GuiPhase();
     data class GamePart1(val hasTurn: Boolean) : GuiPhase();

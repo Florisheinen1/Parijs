@@ -18,10 +18,13 @@ import javax.swing.JTextField
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import javax.swing.text.BadLocationException
+import javax.swing.text.Position
+import kotlin.contracts.contract
 import kotlin.math.abs
 
-class Gui : UI() {
+val INITIAL_GUI_PHASE = GuiPhase.Connecting;
 
+class Gui : UI() {
     val actionStarter = object : UserActionStarter() {
         override fun fire(action: UserAction) {
             onUserAction(action);
@@ -29,7 +32,7 @@ class Gui : UI() {
     }
 
     val window = GameWindow(actionStarter);
-    private var guiPhase: GuiPhase = GuiPhase.Connecting;
+    private var guiPhase: GuiPhase = INITIAL_GUI_PHASE;
 
     override fun getServerAddress(): Pair<InetAddress, Int> {
         val startDialog = ConnectDialog();
@@ -40,6 +43,8 @@ class Gui : UI() {
     }
 
     override fun updatePhase(newPhase: GuiPhase) {
+        if (newPhase != this.guiPhase) this.window.onPhaseChange(newPhase);
+
         when (newPhase) {
             is GuiPhase.Connecting -> TODO()
             is GuiPhase.InLobby -> {
@@ -67,8 +72,9 @@ class Gui : UI() {
 
 class GameWindow(private val actionStarter: UserActionStarter) : JFrame() {
 
-    val screenBoard = ScreenBoard();
-    val unpicked = BuildingCollection();
+    private val screenBoard = ScreenBoard();
+    private val unpicked = BuildingCollection();
+    var uiPhase = INITIAL_GUI_PHASE;
 
     init {
         this.setTitle("Parijs");
@@ -95,31 +101,36 @@ class GameWindow(private val actionStarter: UserActionStarter) : JFrame() {
         this.unpicked.updateBuildings(newBoard.unpickedBuildings);
         this.screenBoard.updateBoard(newBoard);
     }
+
+    fun onPhaseChange(newPhase: GuiPhase) {
+        this.screenBoard.onPhaseChange(newPhase);
+    }
 }
 
-class ScreenTile() : JComponent() {
-
-    var tileType = Tile.BRICKS;
+class ScreenTile(type: Tile = Tile.BRICKS) : JComponent() {
+    var tileType = type;
     var isHovered = false;
 
     init {
-        this.isOpaque = true;
-        this.addMouseListener( object : MouseListener {
-            override fun mouseClicked(e: MouseEvent?) {}
-            override fun mousePressed(e: MouseEvent?) {}
-            override fun mouseReleased(e: MouseEvent?) {}
+        this.tileType = Tile.entries.random();
+        this.cursor = Cursor(Cursor.HAND_CURSOR);
+
+        this.addMouseListener(object : MouseAdapter() {
             override fun mouseEntered(e: MouseEvent?) {
                 isHovered = true;
                 repaint();
             }
+
             override fun mouseExited(e: MouseEvent?) {
                 isHovered = false;
                 repaint();
             }
         })
+    }
 
-        this.tileType = Tile.entries.random();
-        this.cursor = Cursor(Cursor.HAND_CURSOR);
+    fun updateTileType(newTile: Tile) {
+        this.tileType = newTile;
+        this.repaint();
     }
 
     override fun paintComponent(g: Graphics?) {
@@ -168,18 +179,109 @@ class ScreenTile() : JComponent() {
     }
 }
 
-class ScreenBoardTileLayer : JPanel() {
-    val COLS = 8;
-    val ROWS = 8;
+class ScreenTileBlock() : JPanel() {
+    private val topLeftTile = ScreenTile();
+    private val topRightTile = ScreenTile();
+    private val bottomLeftTile = ScreenTile();
+    private val bottomRightTile = ScreenTile();
+    private var isHovered = false;
 
     init {
-        this.layout = GridLayout(ROWS, COLS);
-        for (x in 0..<COLS) {
-            for (y in 0..<ROWS) {
-                val tile = ScreenTile();
-                this.add(tile);
-            }
+        this.layout = GridLayout(2, 2, 3, 3);
+        this.add(topLeftTile);
+        this.add(topRightTile);
+        this.add(bottomLeftTile);
+        this.add(bottomRightTile);
 
+        val childMouseListener = object : MouseAdapter() {
+            override fun mouseEntered(e: MouseEvent?) {
+                if (e == null) return;
+                handleChildMouseEnterEvent(e);
+            }
+            override fun mouseExited(e: MouseEvent?) {
+                if (e == null) return;
+                handleChildMouseExitEvent(e);
+            }
+        }
+        this.topLeftTile.addMouseListener(childMouseListener);
+        this.topRightTile.addMouseListener(childMouseListener);
+        this.bottomLeftTile.addMouseListener(childMouseListener);
+        this.bottomRightTile.addMouseListener(childMouseListener);
+
+        this.addMouseListener(object : MouseAdapter() {
+            override fun mouseEntered(e: MouseEvent?) {
+                if (e == null) return;
+                if (containsScreenPoint(e.locationOnScreen)) {
+                    if (!isHovered) {
+                        absoluteMouseEntered(e);
+                    }
+                }
+            }
+            override fun mouseExited(e: MouseEvent?) {
+                if (e == null) return;
+                if (!containsScreenPoint(e.locationOnScreen)) {
+                    if (isHovered) {
+                        absoluteMouseExited(e);
+                    }
+                }
+            }
+        })
+    }
+
+    private fun containsScreenPoint(point: Point): Boolean {
+        return Rectangle(this.locationOnScreen, Dimension(this.width, this.height)).contains(point);
+    }
+
+    fun handleChildMouseExitEvent(e: MouseEvent) {
+        if (!this.containsScreenPoint(e.locationOnScreen)) {
+            if (this.isHovered) {
+                absoluteMouseExited(e);
+            }
+        }
+    }
+    fun handleChildMouseEnterEvent(e: MouseEvent) {
+        if (this.containsScreenPoint(e.locationOnScreen)) {
+            if (!this.isHovered) {
+                absoluteMouseEntered(e);
+            }
+        }
+    }
+
+    fun absoluteMouseEntered(e: MouseEvent) {
+        this.isHovered = true;
+        this.repaint();
+    }
+    fun absoluteMouseExited(e: MouseEvent) {
+        this.isHovered = false;
+        this.repaint();
+    }
+
+    override fun paintComponent(g: Graphics?) {
+        if (g == null) return;
+
+        g.color = if (this.isHovered) Color.BLUE else Color.DARK_GRAY;
+        g.fillRect(0, 0, width, height);
+    }
+
+    fun updateTiles(newTileBlock: TileBlock) {
+        this.topLeftTile.updateTileType(newTileBlock.topLeft);
+        this.topRightTile.updateTileType(newTileBlock.topRight);
+        this.bottomLeftTile.updateTileType(newTileBlock.bottomLeft);
+        this.bottomRightTile.updateTileType(newTileBlock.bottomRight);
+    }
+}
+
+class ScreenBoardTileLayer : JPanel() {
+    private val BLOCK_COLS = 4;
+    private val BLOCK_ROWS = 4;
+
+    init {
+        this.layout = GridLayout(BLOCK_ROWS, BLOCK_ROWS, 5, 5);
+
+        for (x in 0..<BLOCK_COLS) {
+            for (y in 0..<BLOCK_ROWS) {
+                this.add(ScreenTileBlock());
+            }
         }
     }
 
@@ -189,13 +291,13 @@ class ScreenBoardTileLayer : JPanel() {
             return;
         }
         super.paintComponent(g);
-        g.color = Color.GREEN;
+        g.color = Color.RED;
         g.fillRect(0, 0, width, height);
     }
 }
 
 class ScreenBoard : JLayeredPane() {
-    val BOARD_SIZE = 500;
+    private val BOARD_SIZE = 500;
 
     init {
         val tileLayer = ScreenBoardTileLayer();
@@ -217,10 +319,14 @@ class ScreenBoard : JLayeredPane() {
     fun updateBoard(newBoard: Board) {
         println("Updating screen board with new board data");
     }
+
+    fun onPhaseChange(newPhase: GuiPhase) {
+
+    }
 }
 
 class ScreenBuilding(var building: Building) : JComponent() {
-    val borderSize = 5;
+    private val borderSize = 5;
     var isHovered = false;
     var isSelected = false;
 
