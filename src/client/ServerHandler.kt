@@ -31,7 +31,7 @@ class ServerHandler(socket: Socket, private val player: Player) {
     }
 
     fun sendPacket(packet: Packet) {
-        val data = (packet.toString() + "\n").toByteArray(Charset.defaultCharset());
+        val data = (packet.serialize() + "\n").toByteArray(Charset.defaultCharset());
         this.writer.write(data);
     }
 
@@ -42,10 +42,14 @@ class ServerHandler(socket: Socket, private val player: Player) {
     }
 
     private fun handleIncomingPacket(packet: Packet) {
+
         when (packet) {
             Packet.WelcomeToLobby -> println("Entered lobby!");
             is Packet.Part1Started -> this.player.startPart1(packet.selectedCards);
-            is Packet.AskForMovePart1 -> this.player.askTurnPart1(packet.availableBuildings, packet.topTileBlock);
+            is Packet.AskForMovePart1 -> {
+                val move = this.player.askTurnPart1(packet.availableBuildings, packet.topTileBlock);
+                this.sendPacket(Packet.ReplyWithMovePart1(move));
+            }
             is Packet.ReplyWithMovePart1 -> println("Received weird message from server: '%s'".format(packet.toString()));
             is Packet.RespondToMovePart1 -> this.player.respondToMove(packet.moveResponse);
             is Packet.UpdateWithMovePart1 -> this.player.updateMovePart1(packet.move);

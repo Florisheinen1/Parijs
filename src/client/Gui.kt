@@ -6,33 +6,39 @@ import java.awt.event.*
 import java.net.InetAddress
 import java.net.UnknownHostException
 import java.util.*
-import javax.swing.BorderFactory
-import javax.swing.JButton
-import javax.swing.JComponent
-import javax.swing.JDialog
-import javax.swing.JFrame
-import javax.swing.JLabel
-import javax.swing.JLayeredPane
-import javax.swing.JPanel
-import javax.swing.JTextField
+import javax.swing.*
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import javax.swing.text.BadLocationException
-import javax.swing.text.Position
-import kotlin.contracts.contract
 import kotlin.math.abs
 
 val INITIAL_GUI_PHASE = GuiPhase.Connecting;
 
+sealed class UserClick {
+    data object CloseButton: UserClick();
+    data class UnpickedBuilding(val name: BuildingName) : UserClick();
+}
+
+interface UserClickListener {
+    fun onUserClick(click: UserClick);
+}
+
 class Gui : UI() {
-    val actionStarter = object : UserActionStarter() {
-        override fun fire(action: UserAction) {
-            onUserAction(action);
+    val userClickListener = object : UserClickListener {
+        override fun onUserClick(click: UserClick) {
+            handleUserClick(click);
         }
     }
 
-    val window = GameWindow(actionStarter);
+    val window = GameWindow(userClickListener);
     private var guiPhase: GuiPhase = INITIAL_GUI_PHASE;
+
+    private fun handleUserClick(click: UserClick) {
+        when (click) {
+            is UserClick.UnpickedBuilding -> this.onUserAction(UserAction.PickBuilding(click.name));
+            is UserClick.CloseButton -> this.onUserAction(UserAction.CloseWindow)
+        }
+    }
 
     override fun getServerAddress(): Pair<InetAddress, Int> {
         val startDialog = ConnectDialog();
@@ -61,7 +67,7 @@ class Gui : UI() {
     }
 
     override fun updateGameState(board: Board) {
-        val a = { i: Int -> i + 1 }
+        this.window.updateBoard(board);
     }
 
     private fun openGameWindow() {
@@ -70,10 +76,14 @@ class Gui : UI() {
     }
 }
 
-class GameWindow(private val actionStarter: UserActionStarter) : JFrame() {
+class GameWindow(private val userClickListener: UserClickListener) : JFrame() {
 
-    private val screenBoard = ScreenBoard();
-    private val unpicked = BuildingCollection();
+    private val screenBoard = ScreenBoard(userClickListener);
+    private val unpicked = BuildingCollection(object : BuildingSelectionListener {
+        override fun onSelect(building: BuildingName) {
+            userClickListener.onUserClick(UserClick.UnpickedBuilding(building));
+        }
+    });
     var uiPhase = INITIAL_GUI_PHASE;
 
     init {
@@ -90,7 +100,7 @@ class GameWindow(private val actionStarter: UserActionStarter) : JFrame() {
         this.addWindowListener(object : WindowAdapter() {
             override fun windowClosing(e: WindowEvent?) {
                 super.windowClosing(e)
-                actionStarter.fire(UserAction.CloseWindow);
+                userClickListener.onUserClick(UserClick.CloseButton);
             }
         })
 
@@ -296,7 +306,7 @@ class ScreenBoardTileLayer : JPanel() {
     }
 }
 
-class ScreenBoard : JLayeredPane() {
+class ScreenBoard(val clickListener: UserClickListener) : JLayeredPane() {
     private val BOARD_SIZE = 500;
 
     init {
@@ -328,7 +338,7 @@ class ScreenBoard : JLayeredPane() {
 class ScreenBuilding(var building: Building) : JComponent() {
     private val borderSize = 5;
     var isHovered = false;
-    var isSelected = false;
+    var selectionListener: BuildingSelectionListener? = null;
 
     init {
         this.addComponentListener(object : ComponentAdapter() {
@@ -343,13 +353,9 @@ class ScreenBuilding(var building: Building) : JComponent() {
                 isHovered = false;
                 repaint();
             }
-
             override fun mouseClicked(e: MouseEvent?) {
-                if (e != null) {
-                    println("Clicked mouse!");
-                    isSelected = contains(e.x, e.y);
-                    repaint();
-                }
+                if (selectionListener == null) return;
+                selectionListener!!.onSelect(building.name);
             }
         })
         this.cursor = Cursor(Cursor.HAND_CURSOR);
@@ -376,7 +382,6 @@ class ScreenBuilding(var building: Building) : JComponent() {
 
             // Draw border
             g.color = if (this.isHovered) Color.BLACK else Color.WHITE;
-           if (this.isSelected) g.color = Color.RED;
 
             g.fillRect(rect.x, rect.y, rect.width, rect.height);
 
@@ -430,7 +435,11 @@ class ScreenBuilding(var building: Building) : JComponent() {
     }
 }
 
-class BuildingCollection : JPanel(null) {
+interface BuildingSelectionListener {
+    fun onSelect(building: BuildingName);
+}
+
+class BuildingCollection(private val buildingSelectionListener: BuildingSelectionListener) : JPanel(null) {
     val borderSize = 20;
     val COLLECTION_WIDTH = 400 + borderSize;
     val UNIT_SIZE = (COLLECTION_WIDTH - 2*borderSize) / 7;
@@ -471,14 +480,17 @@ class BuildingCollection : JPanel(null) {
                     absoluteDimension.x,
                     absoluteDimension.y);
         }
+        this.repaint();
     }
 
     fun updateBuildings(buildings: List<BuildingName>) {
+        println("Updating buildings: %d".format(buildings.size));
         this.removeAll();
         this.screenBuildingChildren.clear();
 
         for (buildingName in buildings) {
             val screenBuilding = ScreenBuilding(Building.fromName(buildingName));
+            screenBuilding.selectionListener = buildingSelectionListener;
             this.screenBuildingChildren.add(screenBuilding);
             this.add(screenBuilding);
         }
@@ -512,8 +524,6 @@ class BuildingCollection : JPanel(null) {
         g.color = Color(100, 30, 30);
         g.fillRect(collectionLeft, collectionTop, COLLECTION_WIDTH, COLLECTION_HEIGHT);
     }
-
-
 }
 
 

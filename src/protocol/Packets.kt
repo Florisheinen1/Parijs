@@ -93,6 +93,7 @@ fun sanitize(s: String): String {
 
 class Parser {
     fun parsePacket(s: String): Packet {
+        println("Received packet: '%s'".format(s));
         val delimited = s.split(Packet.DELIMITER);
         return when (Packet.PACKET_HEADERS.valueOf(delimited[0])) {
             Packet.PACKET_HEADERS.WELCOME_TO_LOBBY -> Packet.WelcomeToLobby;
@@ -102,12 +103,13 @@ class Parser {
                 Packet.Part1Started(cards);
             }
             Packet.PACKET_HEADERS.ASK_FOR_MOVE_PART_1 -> {
-                val buildings = parseList(delimited[1]).map { BuildingName.valueOf(it) }
+                val parsedBuildingsList = parseList(delimited[1]);
+                val buildings = if (parsedBuildingsList[0].isEmpty()) emptyList() else parsedBuildingsList.map { BuildingName.valueOf(it) }
                 val tileBlock = tileBlockFromString(delimited[2]);
                 return Packet.AskForMovePart1(buildings, tileBlock);
             }
             Packet.PACKET_HEADERS.REPLY_WITH_MOVE_PART_1 -> {
-                val move = movePart1FromString(delimited[1]);
+                val move = movePart1FromString(s.removePrefix(Packet.PACKET_HEADERS.REPLY_WITH_MOVE_PART_1.name + Packet.DELIMITER));
                 return Packet.ReplyWithMovePart1(move);
             }
             Packet.PACKET_HEADERS.RESPOND_TO_MOVE_PART_1 -> {
@@ -115,7 +117,7 @@ class Parser {
                 return Packet.RespondToMovePart1(moveResponse);
             }
             Packet.PACKET_HEADERS.UPDATE_WITH_MOVE_PART_1 -> {
-                val move = movePart1FromString(delimited[1]);
+                val move = movePart1FromString(s.removePrefix(Packet.PACKET_HEADERS.UPDATE_WITH_MOVE_PART_1.name + Packet.DELIMITER));
                 return Packet.UpdateWithMovePart1(move)
             }
         }

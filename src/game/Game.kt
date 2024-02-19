@@ -60,7 +60,7 @@ class Game(val player1: Player, val player2: Player) {
             if (validMove is MovePart1.PlaceBlockAt) lastPlayerColorThatPlacedTileBlock = playerColorWithTurn;
 
             // Execute the move
-            this.handleMovePart1(validMove);
+            this.handleMovePart1(validMove, playerColorWithTurn);
 
             // Update the other player
             val otherPlayer = getPlayerOfColor(playerColorWithTurn.getInverted());
@@ -99,8 +99,12 @@ class Game(val player1: Player, val player2: Player) {
         return MoveResponse.Accept; // TODO: Implement this
     }
 
-    private fun handleMovePart1(move: MovePart1) {
-        // TODO: Implement this
+    private fun handleMovePart1(move: MovePart1, playerColor: PlayerColor) {
+        when (move) {
+            MovePart1.Pass -> println("User passed");
+            is MovePart1.PickBuilding -> this.board.pickBuilding(move.buildingName, playerColor);
+            is MovePart1.PlaceBlockAt -> TODO()
+        }
     }
 
     private fun partOneIsFinished(): Boolean {

@@ -39,10 +39,6 @@ abstract class UserActionListener {
     // TODO: Have code that checks if this action was not used
 }
 
-abstract class UserActionStarter {
-    abstract fun fire(action: UserAction);
-}
-
 sealed class UserAction {
     data object CloseWindow : UserAction();
     data class PickBuilding(var buildingName: BuildingName) : UserAction();

@@ -12,10 +12,17 @@ class Client(private val ui: UI) : Player {
     init {
         this.ui.addUserActionListener(object : UserActionListener() {
             override fun onUserAction(action: UserAction) {
-                if (action is UserAction.CloseWindow) {
-                    println("Received window close event. Closing Client!");
-                    shouldExit = true
-                };
+                when (action) {
+                    is UserAction.CloseWindow -> {
+                        println("Received window close event. Closing Client!");
+                        shouldExit = true
+                    }
+                    is UserAction.Pass -> TODO()
+                    is UserAction.PickBuilding -> {
+                        println("Picked building: %s. Doing the shizzle!".format(action.buildingName));
+                    }
+                    is UserAction.PlaceTileBlock -> TODO()
+                }
             }
         });
     }
@@ -72,13 +79,18 @@ class Client(private val ui: UI) : Player {
                     is UserAction.PickBuilding -> move = MovePart1.PickBuilding(action.buildingName);
                     is UserAction.PlaceTileBlock -> move = MovePart1.PlaceBlockAt(action.position);
                     is UserAction.Pass -> move = MovePart1.Pass;
-                    else -> {}
+                    else -> {
+                        println("Ignoring action that is not applicable: %s".format(action.toString()));
+                    }
                 }
             }
         };
 
         // Add action listener
         this.ui.addUserActionListener(listener);
+
+        // Update board representation in UI
+        this.ui.updateGameState(this.board);
 
         // Indicate the user is free to make the move
         this.ui.updatePhase(GuiPhase.GamePart1(true));
@@ -89,15 +101,36 @@ class Client(private val ui: UI) : Player {
         // Remove the action listener again
         this.ui.removeUserActionListener(listener);
 
-        return move!!;
+        val validatedMove: MovePart1 = move!!;
+
+        // Update our own board representation
+        when (validatedMove) {
+            is MovePart1.Pass -> {}
+            is MovePart1.PickBuilding -> {
+                this.board.pickBuilding(validatedMove.buildingName, PlayerColor.BLUE)
+                this.ui.updateGameState(this.board);
+            }
+            is MovePart1.PlaceBlockAt -> TODO()
+        }
+
+        return validatedMove;
     }
 
     override fun respondToMove(response: MoveResponse) {
-        TODO("Not yet implemented")
+        println("Received response to movement: %s".format(response.toString()))
+        // TODO: Handle denials
     }
 
     override fun updateMovePart1(move: MovePart1) {
-        TODO("Not yet implemented")
+        when (move) {
+            MovePart1.Pass -> println("Other opponent skipped its turn");
+            is MovePart1.PickBuilding -> {
+                println("Opponent picked: '%s'".format(move.buildingName));
+                this.board.pickBuilding(move.buildingName, PlayerColor.ORANGE);
+                this.ui.updateGameState(this.board);
+            }
+            is MovePart1.PlaceBlockAt -> TODO()
+        }
     }
 
     override fun startPar2() {
