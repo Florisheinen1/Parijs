@@ -7,20 +7,30 @@ import java.net.InetAddress
 import java.net.UnknownHostException
 import java.util.*
 import javax.swing.*
+import javax.swing.border.EmptyBorder
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import javax.swing.text.BadLocationException
+import javax.swing.text.LayoutQueue
 import kotlin.math.abs
 
 val INITIAL_GUI_PHASE = GuiPhase.Connecting;
 
+interface Selectable {
+    fun select();
+    fun deselect();
+}
+
 sealed class UserClick {
     data object CloseButton: UserClick();
     data class UnpickedBuilding(val name: BuildingName) : UserClick();
+    data class SelectUnplacedTileBlock(val tileBlock: TileBlock, val selectable: Selectable) : UserClick();
+    data class OnBoard(val tileX: Int, val tileY: Int) : UserClick();
 }
 
 interface UserClickListener {
     fun onUserClick(click: UserClick);
+    fun getSelectedClick(): UserClick?;
 }
 
 class Gui : UI() {
@@ -28,15 +38,38 @@ class Gui : UI() {
         override fun onUserClick(click: UserClick) {
             handleUserClick(click);
         }
+        override fun getSelectedClick(): UserClick? {
+            if (selectedClick == null) return null;
+            return selectedClick!!.first;
+        }
     }
 
     val window = GameWindow(userClickListener);
     private var guiPhase: GuiPhase = INITIAL_GUI_PHASE;
 
+    private var selectedClick: Pair<UserClick, Selectable>? = null;
+
     private fun handleUserClick(click: UserClick) {
         when (click) {
             is UserClick.UnpickedBuilding -> this.onUserAction(UserAction.PickBuilding(click.name));
             is UserClick.CloseButton -> this.onUserAction(UserAction.CloseWindow)
+            is UserClick.SelectUnplacedTileBlock -> {
+                if (this.selectedClick != null) {
+                    this.selectedClick!!.second.deselect();
+                }
+                this.selectedClick = Pair(click, click.selectable);
+                click.selectable.select();
+                println("Clicked on unplaced tileBlock!");
+            }
+            is UserClick.OnBoard -> {
+                println("User clicked on board!");
+                if (selectedClick == null) {
+                    println("Clicked on %d %d, but no tileBlock selected!".format(click.tileX, click.tileY));
+                    return;
+                } else if (selectedClick!!.first is UserClick.OnBoard) {
+                    println("This is the placing action! %d, %d".format(click.tileX, click.tileY));
+                }
+            }
         }
     }
 
@@ -79,23 +112,23 @@ class Gui : UI() {
 class GameWindow(private val userClickListener: UserClickListener) : JFrame() {
 
     private val screenBoard = ScreenBoard(userClickListener);
-    private val unpicked = BuildingCollection(object : BuildingSelectionListener {
-        override fun onSelect(building: BuildingName) {
-            userClickListener.onUserClick(UserClick.UnpickedBuilding(building));
-        }
-    });
-    var uiPhase = INITIAL_GUI_PHASE;
+    private val bluePlayerArea = PlayerPanel(PlayerColor.BLUE);
+    private val orangePlayerArea = PlayerPanel(PlayerColor.ORANGE);
+    private val bottomPanel = BottomPanel(userClickListener);
 
     init {
         this.setTitle("Parijs");
         this.setDefaultCloseOperation(EXIT_ON_CLOSE);
         this.setSize(900, 700);
-        this.layout = BorderLayout(50, 50);
+        this.preferredSize = Dimension(900, 700);
+        this.layout = BorderLayout(10, 10);
 
         this.add(screenBoard, BorderLayout.CENTER);
 
-        unpicked.updateBuildings(BuildingName.entries);
-        this.add(unpicked, BorderLayout.SOUTH);
+        this.add(bottomPanel, BorderLayout.SOUTH);
+
+        this.add(bluePlayerArea, BorderLayout.EAST);
+        this.add(orangePlayerArea, BorderLayout.WEST);
 
         this.addWindowListener(object : WindowAdapter() {
             override fun windowClosing(e: WindowEvent?) {
@@ -108,12 +141,101 @@ class GameWindow(private val userClickListener: UserClickListener) : JFrame() {
     }
 
     fun updateBoard(newBoard: Board) {
-        this.unpicked.updateBuildings(newBoard.unpickedBuildings);
+        this.bottomPanel.updateBoard(newBoard);
+        this.bluePlayerArea.updateBoard(newBoard);
+        this.orangePlayerArea.updateBoard(newBoard);
         this.screenBoard.updateBoard(newBoard);
     }
 
     fun onPhaseChange(newPhase: GuiPhase) {
         this.screenBoard.onPhaseChange(newPhase);
+    }
+}
+
+class BottomPanel(private val userClickListener: UserClickListener) : JPanel() {
+    private val unpickedBuildings = BuildingCollection(object : BuildingSelectionListener {
+        override fun onSelect(building: BuildingName) {
+            userClickListener.onUserClick(UserClick.UnpickedBuilding(building));
+        }
+    });
+
+    private val rightPanel = BottomRightPanel(userClickListener);
+    private val leftPanel = BottomRightPanel(userClickListener);
+
+    init {
+        this.layout = BorderLayout();
+        unpickedBuildings.updateBuildings(BuildingName.entries);
+        this.add(unpickedBuildings, BorderLayout.CENTER);
+        this.add(rightPanel, BorderLayout.EAST);
+        this.add(leftPanel, BorderLayout.WEST);
+    }
+
+    fun updateBoard(newBoard: Board) {
+        this.unpickedBuildings.updateBuildings(newBoard.unpickedBuildings);
+        this.rightPanel.updateBoard(newBoard);
+        this.leftPanel.updateBoard(newBoard);
+    }
+}
+
+class BottomRightPanel(private val userClickListener: UserClickListener) : JPanel() {
+    private val WIDTH = 300;
+    private val BORDER_SIZE = 20;
+    private val message = JLabel("Text goes here");
+
+    private val unplacedTile = ScreenTileBlock(object : TileBlockSelectionListener {
+        override fun onSelectedTile(tileBlock: TileBlock, relTileX: Int, relTileY: Int) {
+            println("Clicked unplaced tile block!");
+        }
+    });
+
+    private val passButton = JButton("Skip turn");
+
+    init {
+        this.preferredSize = Dimension(WIDTH, WIDTH);
+        this.border = EmptyBorder(0, BORDER_SIZE*2, BORDER_SIZE, BORDER_SIZE*2);
+        this.layout = GridLayout(3, 1, 20, 20);
+
+        this.add(message);
+        this.add(unplacedTile);
+        this.add(passButton);
+
+    }
+
+    fun updateBoard(newBoard: Board) {
+        this.unplacedTile.updateTiles(newBoard.topBlueBlock!!);
+    }
+}
+
+class PlayerPanel(private val playerColor: PlayerColor) : JPanel() {
+    private val buildingInventory = BuildingCollection(object : BuildingSelectionListener {
+        override fun onSelect(building: BuildingName) {}
+    })
+
+    init {
+        this.layout = FlowLayout();
+        this.setBorder(EmptyBorder(30, 30, 30, 30));
+        this.minimumSize = Dimension(50, 50);
+        this.add(buildingInventory);
+    }
+
+    override fun paintComponent(g: Graphics?) {
+        if (g == null) return;
+        super.paintComponent(g)
+
+        g.color = when (playerColor) {
+            PlayerColor.BLUE -> Color(150,150, 255);
+            PlayerColor.ORANGE -> Color(255, 200,150);
+        }
+        g.fillRect(0, 0, width, height);
+    }
+
+    fun updateBoard(newBoard: Board) {
+        this.buildingInventory.updateBuildings(
+            when (playerColor) {
+                PlayerColor.BLUE -> newBoard.blueInventoryBuildings
+                PlayerColor.ORANGE -> newBoard.orangeInventoryBuildings
+            }
+        )
     }
 }
 
@@ -152,7 +274,7 @@ class ScreenTile(type: Tile = Tile.BRICKS) : JComponent() {
 
         if (this.isHovered) {
             g.color = Color.GREEN;
-            g.fillRect(0, 0, width, height);
+            g.fillRect(0, 0, width+1, height+1);
         } else {
             this.drawTile(this.tileType, g);
         }
@@ -189,7 +311,11 @@ class ScreenTile(type: Tile = Tile.BRICKS) : JComponent() {
     }
 }
 
-class ScreenTileBlock() : JPanel() {
+interface TileBlockSelectionListener {
+    fun onSelectedTile(tileBlock: TileBlock, relTileX: Int, relTileY: Int);
+}
+
+class ScreenTileBlock(private val selectionListener: TileBlockSelectionListener) : JPanel() {
     private val topLeftTile = ScreenTile();
     private val topRightTile = ScreenTile();
     private val bottomLeftTile = ScreenTile();
@@ -197,7 +323,7 @@ class ScreenTileBlock() : JPanel() {
     private var isHovered = false;
 
     init {
-        this.layout = GridLayout(2, 2, 3, 3);
+        this.layout = GridLayout(2, 2, 0, 0);
         this.add(topLeftTile);
         this.add(topRightTile);
         this.add(bottomLeftTile);
@@ -218,6 +344,19 @@ class ScreenTileBlock() : JPanel() {
         this.bottomLeftTile.addMouseListener(childMouseListener);
         this.bottomRightTile.addMouseListener(childMouseListener);
 
+        this.topLeftTile.addMouseListener(object : MouseAdapter() {
+            override fun mouseClicked(e: MouseEvent?) { selectionListener.onSelectedTile(TileBlock(Direction.NORTH, topLeftTile.tileType, topRightTile.tileType, bottomLeftTile.tileType, bottomRightTile.tileType), 0, 0); }
+        })
+        this.topRightTile.addMouseListener(object : MouseAdapter() {
+            override fun mouseClicked(e: MouseEvent?) { selectionListener.onSelectedTile(TileBlock(Direction.NORTH, topLeftTile.tileType, topRightTile.tileType, bottomLeftTile.tileType, bottomRightTile.tileType), 1, 0); }
+        })
+        this.bottomLeftTile.addMouseListener(object : MouseAdapter() {
+            override fun mouseClicked(e: MouseEvent?) { selectionListener.onSelectedTile(TileBlock(Direction.NORTH, topLeftTile.tileType, topRightTile.tileType, bottomLeftTile.tileType, bottomRightTile.tileType), 0, 1); }
+        })
+        this.bottomRightTile.addMouseListener(object : MouseAdapter() {
+            override fun mouseClicked(e: MouseEvent?) { selectionListener.onSelectedTile(TileBlock(Direction.NORTH, topLeftTile.tileType, topRightTile.tileType, bottomLeftTile.tileType, bottomRightTile.tileType), 1, 1); }
+        })
+
         this.addMouseListener(object : MouseAdapter() {
             override fun mouseEntered(e: MouseEvent?) {
                 if (e == null) return;
@@ -234,6 +373,12 @@ class ScreenTileBlock() : JPanel() {
                         absoluteMouseExited(e);
                     }
                 }
+            }
+        })
+
+        this.addMouseListener(object : MouseAdapter() {
+            override fun mouseClicked(e: MouseEvent?) {
+                println("Clicked on this tileBlock!");
             }
         })
     }
@@ -281,16 +426,23 @@ class ScreenTileBlock() : JPanel() {
     }
 }
 
-class ScreenBoardTileLayer : JPanel() {
+class ScreenBoardTileLayer(val clickListener: UserClickListener) : JPanel() {
     private val BLOCK_COLS = 4;
     private val BLOCK_ROWS = 4;
 
     init {
-        this.layout = GridLayout(BLOCK_ROWS, BLOCK_ROWS, 5, 5);
+        this.layout = GridLayout(BLOCK_ROWS, BLOCK_ROWS, 0, 0);
 
         for (x in 0..<BLOCK_COLS) {
+            break; // TODO: Remove this
             for (y in 0..<BLOCK_ROWS) {
-                this.add(ScreenTileBlock());
+                this.add(ScreenTileBlock(object : TileBlockSelectionListener {
+                    override fun onSelectedTile(tileBlock: TileBlock, relTileX: Int, relTileY: Int) {
+                        val tileX = y * 2 + relTileX;
+                        val tileY = x * 2 + relTileY;
+                        clickListener.onUserClick(UserClick.OnBoard(tileX, tileY));
+                    }
+                }));
             }
         }
     }
@@ -306,11 +458,11 @@ class ScreenBoardTileLayer : JPanel() {
     }
 }
 
-class ScreenBoard(val clickListener: UserClickListener) : JLayeredPane() {
+class ScreenBoard(clickListener: UserClickListener) : JLayeredPane() {
     private val BOARD_SIZE = 500;
 
     init {
-        val tileLayer = ScreenBoardTileLayer();
+        val tileLayer = ScreenBoardTileLayer(clickListener);
         this.add(tileLayer, DEFAULT_LAYER);
 
         this.addComponentListener(object : ComponentAdapter() {
@@ -440,7 +592,7 @@ interface BuildingSelectionListener {
 }
 
 class BuildingCollection(private val buildingSelectionListener: BuildingSelectionListener) : JPanel(null) {
-    val borderSize = 20;
+    val borderSize = 2;
     val COLLECTION_WIDTH = 400 + borderSize;
     val UNIT_SIZE = (COLLECTION_WIDTH - 2*borderSize) / 7;
     val COLLECTION_HEIGHT = UNIT_SIZE * 8 + 2*borderSize;
@@ -448,7 +600,7 @@ class BuildingCollection(private val buildingSelectionListener: BuildingSelectio
     val screenBuildingChildren = Vector<ScreenBuilding>();
 
     init {
-        this.preferredSize = Dimension(COLLECTION_WIDTH, COLLECTION_HEIGHT + 50);
+        this.preferredSize = Dimension(COLLECTION_WIDTH, COLLECTION_HEIGHT);
 
         this.addComponentListener(object : ComponentAdapter() {
             override fun componentResized(e: ComponentEvent?) {
@@ -459,7 +611,7 @@ class BuildingCollection(private val buildingSelectionListener: BuildingSelectio
 
     private fun updateBuildingPositions() {
         val collectionLeft = this.width / 2 - COLLECTION_WIDTH / 2 + borderSize;
-        val collectionTop = this.height / 2 - COLLECTION_HEIGHT / 2 + borderSize;
+        val collectionTop = borderSize;
 
         for (screenBuilding in this.screenBuildingChildren) {
             val relativeOffset = getRelativeBuildingUnits(screenBuilding.building.name);
@@ -519,7 +671,10 @@ class BuildingCollection(private val buildingSelectionListener: BuildingSelectio
         super.paintComponent(g)
 
         val collectionLeft = this.width / 2 - COLLECTION_WIDTH / 2;
-        val collectionTop = this.height / 2 - COLLECTION_HEIGHT / 2;
+        val collectionTop = 0;
+
+        g.color = Color(20, 20, 50);
+        g.fillRect(0, 0, width, height);
 
         g.color = Color(100, 30, 30);
         g.fillRect(collectionLeft, collectionTop, COLLECTION_WIDTH, COLLECTION_HEIGHT);
