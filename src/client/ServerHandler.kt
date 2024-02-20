@@ -52,6 +52,7 @@ class ServerHandler(socket: Socket, private val player: Player) {
             is Packet.ReplyWithMovePart1 -> println("Received weird message from server: '%s'".format(packet.toString()));
             is Packet.RespondToMovePart1 -> this.player.respondToMove(packet.moveResponse);
             is Packet.UpdateWithMovePart1 -> this.player.updateMovePart1(packet.move);
+            is Packet.Part2Started -> this.player.startPar2();
         }
     }
 }

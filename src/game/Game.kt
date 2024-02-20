@@ -75,6 +75,8 @@ class Game(val player1: Player, val player2: Player) {
 
     private fun doPart2(playerColor: PlayerColor) {
         println("Part 2 starts with player: " + playerColor.name);
+        this.player1.startPar2();
+        this.player2.startPar2();
     }
 
     // Inverts colors when necessary. Returns non-inverted

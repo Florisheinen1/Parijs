@@ -180,7 +180,7 @@ class Client(private val ui: UI) : Player {
     }
 
     override fun startPar2() {
-        TODO("Not yet implemented")
+        println("Started part 2!!!");
     }
 
     override fun askTurnPart2(): MovePart2 {

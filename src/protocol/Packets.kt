@@ -17,7 +17,8 @@ sealed class Packet {
         ASK_FOR_MOVE_PART_1,
         REPLY_WITH_MOVE_PART_1,
         RESPOND_TO_MOVE_PART_1,
-        UPDATE_WITH_MOVE_PART_1
+        UPDATE_WITH_MOVE_PART_1,
+        STARTED_PART_2,
     }
 
     data object WelcomeToLobby : Packet();
@@ -26,6 +27,7 @@ sealed class Packet {
     data class ReplyWithMovePart1(val move: MovePart1) : Packet();
     data class RespondToMovePart1(val moveResponse: MoveResponse) : Packet();
     data class UpdateWithMovePart1(val move: MovePart1) : Packet();
+    data object Part2Started : Packet();
 
     fun serialize(): String {
         when (this) {
@@ -50,6 +52,7 @@ sealed class Packet {
             is UpdateWithMovePart1 -> {
                 return PACKET_HEADERS.UPDATE_WITH_MOVE_PART_1.name + DELIMITER + movePart1ToString(this.move);
             }
+            is Part2Started -> return PACKET_HEADERS.STARTED_PART_2.name;
         }
     }
 
@@ -119,6 +122,7 @@ class Parser {
                 val move = movePart1FromString(s.removePrefix(Packet.PACKET_HEADERS.UPDATE_WITH_MOVE_PART_1.name + Packet.DELIMITER));
                 return Packet.UpdateWithMovePart1(move)
             }
+            Packet.PACKET_HEADERS.STARTED_PART_2 -> Packet.Part2Started;
         }
     }
 
@@ -155,171 +159,3 @@ class Parser {
         return TileBlock(Direction.NORTH, tiles[0], tiles[1], tiles[2], tiles[3]);
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//enum class PACKET_TYPES {
-//    WELCOME_IN_LOBBY,
-//    GAME_STARTED,
-//    GIVE_SETUP_TURN,
-//    APPROVE_SETUP_TURN,
-//    DENY_SETUP_TURN,
-//    SETUP_FINISHED,
-//    ;
-//
-//    fun
-//
-//    fun setupFinishedToString(board: Board, playerColor: PlayerColor): String {
-//        return SETUP_FINISHED.name + "=" + boardToString(board, playerColor);
-//    }
-//    fun setupFinishedFromString(s: String): Board {
-//        return boardFromString(s.removePrefix(SETUP_FINISHED.name + "="));
-//    }
-//
-//    fun gameStartedToString(board: Board, playerColor: PlayerColor): String {
-//        return GAME_STARTED.name + "=" + boardToString(board, playerColor);
-//    }
-//    fun gameStartedFromString(s: String): Board {
-//        return boardFromString(s.removePrefix(GAME_STARTED.name + "="));
-//    }
-//
-//    fun giveSetupToString(board: Board, playerColor: PlayerColor): String {
-//        return GIVE_SETUP_TURN.name + "=" + boardToString(board, playerColor);
-//    }
-//    fun giveSetupFromString(s: String): Board {
-//        return boardFromString(s.removePrefix(GIVE_SETUP_TURN.name + "="));
-//    }
-//
-//    fun approveSetupToString(board: Board, playerColor: PlayerColor): String {
-//        return APPROVE_SETUP_TURN.name + "=" + boardToString(board, playerColor);
-//    }
-//    fun approveSetupFromString(s: String): Board {
-//        return boardFromString(s.removePrefix(APPROVE_SETUP_TURN.name + "="));
-//    }
-//
-//    // ================ HELPERS ==================== //
-//
-//    private fun boardToString(board: Board, playerColor: PlayerColor): String {
-////        var unpickedBuildings = placeNamesToString(board.getNames(board.unpickedBuildings));
-////        var bluePickedBuildings = placeNamesToString(board.getNames(board.blueInventoryBuildings));
-////        var orangePickedBuildings = placeNamesToString(board.getNames(board.orangeInventoryBuildings));
-////
-////        if (playerColor == PlayerColor.PLAYER_ORANGE) {
-////            val tmp = bluePickedBuildings;
-////            bluePickedBuildings = orangePickedBuildings;
-////            orangePickedBuildings = tmp;
-////        }
-////
-////        var cards = cardsToString(board.selectedCardsForGame);
-////        var pickedBlock = if (playerColor==PlayerColor.PLAYER_BLUE) board.topBlueBlock else board.topOrangeBlock;
-////        var pickedBlockString: String = "";
-////        if (pickedBlock != null) {
-////            pickedBlockString = blockToString(if (playerColor == PlayerColor.PLAYER_ORANGE) pickedBlock.getInverted() else pickedBlock);
-////        }
-////
-////        var tiles = tilesToString(board.tiles.toList(), playerColor);
-////
-////        return arrayOf(
-////                unpickedBuildings,
-////                bluePickedBuildings,
-////                orangePickedBuildings,
-////                cards,
-////                pickedBlockString,
-////                tiles,
-////        ).joinToString(separator = ":");
-//        return "";
-//    }
-//
-//    private fun boardFromString(s: String): Board {
-////        val board = Board()
-////
-////        val spl = s.split(":");
-////        board.unpickedBuildings = board.getPlacablesFromNames(placeNamesFromString(spl[0]));
-////        board.blueInventoryBuildings = board.getPlacablesFromNames(placeNamesFromString(spl[1]));
-////        board.orangeInventoryBuildings = board.getPlacablesFromNames(placeNamesFromString(spl[2]));
-////        board.selectedCardsForGame = cardsFromString(spl[3]);
-////        board.topBlueBlock = blockFromString(spl[4]);
-////
-////        val tiles = tilesFromString(spl[5]);
-////
-////        for (i in 0..63) {
-////            board.tiles[i] = tiles[i];
-////        }
-////
-////        return board;
-//        return Board();
-//    }
-
-//    private fun tilesToString(tiles: List<Tile>, playerColor: PlayerColor): String {
-//        val shouldInvert = playerColor == PlayerColor.PLAYER_ORANGE;
-//        val correctTileStrings = Vector<String>();
-//
-//        for (tile in tiles) {
-//            if (shouldInvert) {
-//                correctTileStrings.add(tile.getInverted().name);
-//            } else {
-//                correctTileStrings.add(tile.name);
-//            }
-//        }
-//        return correctTileStrings.joinToString(prefix = "[", separator = ",", postfix = "]");
-//    }
-//    private fun tilesFromString(s: String): Vector<Tile> {
-//        val tileStrings = s.take(s.length-1).drop(1).split(",");
-//        val tiles = Vector<Tile>();
-//        for (tileString in tileStrings) {
-//            tiles.add(Tile.valueOf(tileString));
-//        }
-//        return tiles;
-//    }
-//
-//    private fun cardsToString(cards: List<Cards>): String {
-//        return cards.joinToString(prefix = "[", separator = ",", postfix = "]");
-//    }
-//    private fun cardsFromString(s: String): Vector<Cards> {
-//        val trim = s.take(s.length-1).drop(1).split(",");
-//        val cards = Vector<Cards>();
-//        for (cardStr in trim) {
-//            cards.add(Cards.valueOf(cardStr));
-//        }
-//        return cards;
-//    }
-//
-//    fun blockToString(b: TileBlock?): String {
-//        return if (b == null) {
-//            ""
-//        } else {
-//            "[%s,%s,%s,%s]".format(b.topLeft, b.topRight, b.bottomLeft, b.bottomRight);
-//        }
-//    }
-//
-//    fun blockFromString(s: String): TileBlock? {
-//        if (s.isEmpty()) return null;
-//        val vals = s.take(s.length - 1).drop(1).split(",");
-//        return TileBlock(
-//                Tile.valueOf(vals[0]),
-//                Tile.valueOf(vals[1]),
-//                Tile.valueOf(vals[2]),
-//                Tile.valueOf(vals[3]),
-//        );
-//    }
-//
-//    fun BuildingNamesFromString(buildings: List<BuildingName>): String {
-//        return ""
-//    }
-//    fun <T> listToString(list: List<T>): String {
-//        return list.joinToString(",", "[", "]", transform = { it.toString() });
-//    }
