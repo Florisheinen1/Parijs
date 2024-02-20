@@ -65,12 +65,12 @@ class Client(private val ui: UI) : Player {
         return serverHandler;
     }
 
-    override fun startPart1(cards: List<Cards>) {
+    override fun startPart1(cards: List<CardType>) {
         synchronized(this.board) {
             // Reset the board
             this.board = Board();
 
-            this.board.inGameCards = Vector(cards);
+            this.board.inGameCards = Vector(cards.map { Card(it, CardState.UNPICKED_AND_UNUSED) });
             this.board.unpickedBuildings = Vector(BuildingName.entries);
 
             for (i in 0..<8) {

@@ -1,7 +1,7 @@
 package game
 
 interface Player {
-    fun startPart1(cards: List<Cards>);
+    fun startPart1(cards: List<CardType>);
 
     fun askTurnPart1(availableBuildings: List<BuildingName>, topTileBlock: TileBlock?): MovePart1;
 

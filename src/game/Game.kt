@@ -13,10 +13,15 @@ class Game(val player1: Player, val player2: Player) {
         this.board.unplacedOrangeBlocks = this.selectBlockListsForGame(PlayerColor.ORANGE);
     }
 
-    private fun selectCardsForGame(): Vector<Cards> {
-        val cards = Vector<Cards>();
-        cards.addAll(Cards.entries.shuffled().take(8));
-        return cards;
+    private fun selectCardsForGame(): Vector<Card> {
+        val allCards = Vector<Card>();
+        for (cardType in Card::class.sealedSubclasses) {
+            allCards.add(cardType.objectInstance as? Card);
+        }
+
+        val targetCards = Vector<Card>();
+        targetCards.addAll(allCards.shuffled().take(8));
+        return targetCards;
     }
 
     private fun selectBlockListsForGame(player: PlayerColor): Vector<TileBlock?> {
@@ -42,8 +47,9 @@ class Game(val player1: Player, val player2: Player) {
     // Executes part 1 of the game. Returns which player has the next turn.
     private fun doPart1(): PlayerColor {
         // State that the first part has started
-        this.player1.startPart1(this.board.inGameCards);
-        this.player2.startPart1(this.board.inGameCards);
+        val selectedCardTypes = this.board.inGameCards.map { it.type };
+        this.player1.startPart1(selectedCardTypes);
+        this.player2.startPart1(selectedCardTypes);
 
         // Pick a player that starts
         var playerColorWithTurn = this.pickRandomPlayerColor();

@@ -57,7 +57,7 @@ class ClientHandler(socket: Socket) : Player {
         }
     }
 
-    override fun startPart1(cards: List<Cards>) {
+    override fun startPart1(cards: List<CardType>) {
         sendPacket(Packet.Part1Started(cards));
     }
 

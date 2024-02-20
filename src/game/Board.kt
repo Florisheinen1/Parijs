@@ -1,6 +1,5 @@
 package game
 
-import client.UserAction
 import java.security.InvalidParameterException
 import java.util.Vector
 import kotlin.math.abs
@@ -8,7 +7,7 @@ import kotlin.math.abs
 open class Board {
     var SIZE = 8; // In tiles, both width and height
 
-    var inGameCards = Vector<Cards>();
+    var inGameCards = Vector<Card>();
 
     var unplacedBlueBlocks = Vector<TileBlock?>(); // nulls mean that we do not know what tile it is
     var unplacedOrangeBlocks = Vector<TileBlock?>();
@@ -79,20 +78,27 @@ open class Board {
     }
 }
 
-enum class Cards {
-    LEVITATION, // Switch building
-    METROPOLITAN, // Cover street lantern
-    JARDIN_DES_PLANTES, // Normal building
-    SACRE_COEUR, // No point reduction of unplaced buildings
-    LE_PEINTRE, // The painter
-    CHARTIER, // Mixed color
-    BOUQUINISTES_SUR_LA_SEINE, // Expansion
-    LAMPADAIRE, // Lantern
-    MOULIN_ROUGE, // Dancer
-    FONTAINE_DES_MERS, // Decoration
-    LE_PENSEUR, // Le penseur
-    LA_GRANDE_LUMIERE, // Big lantern
+enum class CardType {
+    LEVITATION,
+    METROPOLITAN,
+    JARDIN_DES_PLANTES,
+    SACRE_COEUR,
+    LE_PEINTRE,
+    CHARTIER,
+    BOUQUINISTES_SUR_LA_SEINE,
+    LAMPADAIRE,
+    MOULIN_ROUGE,
+    FONTAINE_DES_MERS,
+    LE_PENSEUR,
+    LA_GRANDE_LUMIERE,
 }
+enum class CardState {
+    UNPICKED_AND_UNUSED,
+    PICKED_BUT_UNUSED,
+    PICKED_AND_USED
+}
+
+data class Card(val type: CardType, var state: CardState = CardState.UNPICKED_AND_UNUSED);
 
 enum class PlayerColor {
     BLUE,

@@ -22,7 +22,7 @@ sealed class Packet {
     }
 
     data object WelcomeToLobby : Packet();
-    data class Part1Started(val selectedCards: List<Cards>) : Packet();
+    data class Part1Started(val selectedCards: List<CardType>) : Packet();
     data class AskForMovePart1(val availableBuildings: List<BuildingName>, val topTileBlock: TileBlock?) : Packet();
     data class ReplyWithMovePart1(val move: MovePart1) : Packet();
     data class RespondToMovePart1(val moveResponse: MoveResponse) : Packet();
@@ -101,7 +101,7 @@ class Parser {
             Packet.PACKET_HEADERS.WELCOME_TO_LOBBY -> Packet.WelcomeToLobby;
             Packet.PACKET_HEADERS.STARTED_PART_1 -> {
                 val cardsString = s.removePrefix(Packet.PACKET_HEADERS.STARTED_PART_1.name + Packet.DELIMITER);
-                val cards = parseList(cardsString).map { Cards.valueOf(it) }
+                val cards = parseList(cardsString).map { CardType.valueOf(it) }
                 Packet.Part1Started(cards);
             }
             Packet.PACKET_HEADERS.ASK_FOR_MOVE_PART_1 -> {

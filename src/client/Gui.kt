@@ -173,6 +173,7 @@ class BottomPanel(private val userClickListener: UserClickListener) : JPanel() {
     });
 
     private val rightPanel = BottomRightPanel(userClickListener);
+
 //    private val leftPanel = BottomRightPanel(userClickListener);
 
     init {
