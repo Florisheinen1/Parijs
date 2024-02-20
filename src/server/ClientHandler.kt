@@ -35,11 +35,9 @@ class ClientHandler(socket: Socket) : Player {
     fun sendPacket(packet: Packet) {
         val data = (packet.serialize() + "\n").toByteArray(Charset.defaultCharset());
         this.writer.write(data);
-        println("Sending: '%s'".format(packet.toString()));
     }
 
     private fun readPacket(): Packet? {
-        println("Reading incoming message...");
         try {
             val data = this.scanner.nextLine();
             return Parser().parsePacket(data);

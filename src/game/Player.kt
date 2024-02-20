@@ -25,7 +25,7 @@ sealed class MoveResponse {
 
 sealed class MovePart1 {
     data class PickBuilding(val buildingName: BuildingName): MovePart1();
-    data class PlaceBlockAt(val position: Vec2): MovePart1();
+    data class PlaceBlockAt(val position: Vec2, val tileBlock: TileBlock): MovePart1();
 
     data object Pass: MovePart1();
 }

@@ -36,7 +36,6 @@ class ServerHandler(socket: Socket, private val player: Player) {
     }
 
     private fun readPacket(): Packet {
-        println("Waiting for incoming message...");
         val data = this.scanner.nextLine();
         return Parser().parsePacket(data);
     }

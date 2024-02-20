@@ -6,12 +6,11 @@ class Game(val player1: Player, val player2: Player) {
     val board: Board = Board();
 
     init {
-        this.board.ingameCards = selectCardsForGame();
-        this.board.unplacedBlueBlocks = selectBlockListsForGame(PlayerColor.BLUE);
-        this.board.unplacedOrangeBlocks = selectBlockListsForGame(PlayerColor.ORANGE);
+        this.board.inGameCards = this.selectCardsForGame();
 
-        this.board.topBlueBlock = this.board.unplacedBlueBlocks.firstElement();
-        this.board.topOrangeBlock = this.board.unplacedOrangeBlocks.firstElement();
+        this.board.unpickedBuildings = Vector<BuildingName>(BuildingName.entries);
+        this.board.unplacedBlueBlocks = this.selectBlockListsForGame(PlayerColor.BLUE);
+        this.board.unplacedOrangeBlocks = this.selectBlockListsForGame(PlayerColor.ORANGE);
     }
 
     private fun selectCardsForGame(): Vector<Cards> {
@@ -20,8 +19,8 @@ class Game(val player1: Player, val player2: Player) {
         return cards;
     }
 
-    private fun selectBlockListsForGame(player: PlayerColor): Vector<TileBlock> {
-        val blocks = Vector<TileBlock>();
+    private fun selectBlockListsForGame(player: PlayerColor): Vector<TileBlock?> {
+        val blocks = Vector<TileBlock?>();
         for (block in GameConstants.ALL_BLOCKS_OF_BLUE) {
             when (player) {
                 PlayerColor.BLUE -> blocks.add(block.copy())
@@ -43,8 +42,8 @@ class Game(val player1: Player, val player2: Player) {
     // Executes part 1 of the game. Returns which player has the next turn.
     private fun doPart1(): PlayerColor {
         // State that the first part has started
-        this.player1.startPart1(this.board.ingameCards);
-        this.player2.startPart1(this.board.ingameCards);
+        this.player1.startPart1(this.board.inGameCards);
+        this.player2.startPart1(this.board.inGameCards);
 
         // Pick a player that starts
         var playerColorWithTurn = this.pickRandomPlayerColor();
@@ -76,9 +75,9 @@ class Game(val player1: Player, val player2: Player) {
     private fun getValidMovePart1(playerColor: PlayerColor): MovePart1 {
         val playerWithTurn = this.getPlayerOfColor(playerColor);
 
-        val openTileBlock = when (playerColor) {
-            PlayerColor.BLUE -> this.board.topBlueBlock
-            PlayerColor.ORANGE -> this.board.topOrangeBlock
+        val openTileBlock: TileBlock? = when (playerColor) {
+            PlayerColor.BLUE -> if (this.board.unplacedBlueBlocks.isEmpty()) null else this.board.unplacedBlueBlocks[0];
+            PlayerColor.ORANGE -> if (this.board.unplacedOrangeBlocks.isEmpty()) null else this.board.unplacedOrangeBlocks[0];
         }
 
         while (true) {
@@ -101,9 +100,20 @@ class Game(val player1: Player, val player2: Player) {
 
     private fun handleMovePart1(move: MovePart1, playerColor: PlayerColor) {
         when (move) {
-            MovePart1.Pass -> println("User passed");
-            is MovePart1.PickBuilding -> this.board.pickBuilding(move.buildingName, playerColor);
-            is MovePart1.PlaceBlockAt -> TODO()
+            is MovePart1.Pass -> println("User passed");
+            is MovePart1.PickBuilding -> {
+                this.board.unpickedBuildings.removeElement(move.buildingName);
+
+                val inventory = if (playerColor == PlayerColor.BLUE) this.board.blueInventoryBuildings else this.board.orangeInventoryBuildings;
+                inventory.add(move.buildingName);
+            }
+            is MovePart1.PlaceBlockAt -> {
+                val tileBlock: TileBlock? = when (playerColor) {
+                    PlayerColor.BLUE -> if (this.board.unplacedBlueBlocks.isEmpty()) null else this.board.unplacedBlueBlocks[0];
+                    PlayerColor.ORANGE -> if (this.board.unplacedOrangeBlocks.isEmpty()) null else this.board.unplacedOrangeBlocks[0];
+                }
+                this.board.placeTileBlock(move.position, tileBlock!!);
+            }
         }
     }
 

@@ -1,60 +1,40 @@
 package game
 
+import client.UserAction
 import java.security.InvalidParameterException
 import java.util.Vector
 import kotlin.math.abs
 
 open class Board {
-    var SIZE = 8;
+    var SIZE = 8; // In tiles, both width and height
 
-    var ingameCards = Vector<Cards>();
+    var inGameCards = Vector<Cards>();
 
-    var unplacedBlueBlocks = Vector<TileBlock>();
-    var unplacedOrangeBlocks = Vector<TileBlock>();
-    var topOrangeBlock: TileBlock? = null;
-    var topBlueBlock: TileBlock? = null;
+    var unplacedBlueBlocks = Vector<TileBlock?>(); // nulls mean that we do not know what tile it is
+    var unplacedOrangeBlocks = Vector<TileBlock?>();
 
-    var tiles = Array<Tile>(SIZE*SIZE) {Tile.BRICKS};
+    private var tiles = Array(SIZE*SIZE) {Tile.BRICKS};
 
-    var unpickedBuildings = Vector(BuildingName.entries);
+    var unpickedBuildings = Vector<BuildingName>();
     var blueInventoryBuildings = Vector<BuildingName>();
     var orangeInventoryBuildings = Vector<BuildingName>();
 
-    fun placeTileBlock(block: TileBlock, pos: Vec2, player: PlayerColor) {
+    fun placeTileBlock(tilePos: Vec2, tileBlock: TileBlock) {
         if (
-                pos.x < 0 || pos.x >= SIZE ||
-                pos.y < 0 || pos.y >= SIZE ||
-                pos.x % 2 != 0 ||
-                pos.y % 2 != 0
+                tilePos.x < 0 || tilePos.x >= SIZE ||
+                tilePos.y < 0 || tilePos.y >= SIZE ||
+                tilePos.x % 2 != 0 ||
+                tilePos.y % 2 != 0
         ) {
+            // TODO: Deny user move if this went wrong
             throw InvalidParameterException("Invalid args for PlaceBlock");
-        } else {
-            this.setTile(block.topLeft, pos.x, pos.y);
-            this.setTile(block.topRight, pos.x+1, pos.y);
-            this.setTile(block.bottomLeft, pos.x, pos.y+1);
-            this.setTile(block.bottomRight, pos.x+1, pos.y+1);
         }
+        println("Setting new tileBlock at (%d, %d)".format(tilePos.x, tilePos.y));
 
-        when (player) {
-            PlayerColor.ORANGE -> {
-                unplacedOrangeBlocks.removeElement(topOrangeBlock);
-                topOrangeBlock = if (unplacedOrangeBlocks.isEmpty()) null else  unplacedOrangeBlocks[0];
-            }
-            PlayerColor.BLUE -> {
-                unplacedBlueBlocks.removeElement(topBlueBlock)
-                topBlueBlock = if (unplacedBlueBlocks.isEmpty()) null else unplacedBlueBlocks[0];
-            }
-        }
-    }
-
-    fun pickBuilding(buildingName: BuildingName, playerColor: PlayerColor) {
-        this.unpickedBuildings.remove(buildingName);
-
-        val targetInventory = when (playerColor) {
-            PlayerColor.ORANGE -> this.orangeInventoryBuildings
-            PlayerColor.BLUE -> this.blueInventoryBuildings
-        };
-        targetInventory.addElement(buildingName);
+        this.setTile(tileBlock.topLeft, tilePos.x, tilePos.y);
+        this.setTile(tileBlock.topRight, tilePos.x+1, tilePos.y);
+        this.setTile(tileBlock.bottomLeft, tilePos.x, tilePos.y+1);
+        this.setTile(tileBlock.bottomRight, tilePos.x+1, tilePos.y+1);
     }
 
     fun getTile(x: Int, y: Int): Tile {
@@ -64,6 +44,39 @@ open class Board {
     private fun setTile(tile: Tile, x: Int, y: Int) {
         val index = y * SIZE + x;
         tiles[index] = tile;
+    }
+
+    fun deepClone(): Board {
+        val newBoard = Board();
+
+        newBoard.SIZE = this.SIZE;
+
+        for (card in this.inGameCards) {
+            newBoard.inGameCards.add(card);
+        }
+
+        for (block in this.unplacedBlueBlocks) {
+            newBoard.unplacedBlueBlocks.add(block?.copy());
+        }
+        for (block in this.unplacedOrangeBlocks) {
+            newBoard.unplacedOrangeBlocks.add(block?.copy());
+        }
+
+        for (i in 0..<this.tiles.size) {
+            newBoard.tiles[i] = this.tiles[i];
+        }
+
+        for (buildingName in this.unpickedBuildings) {
+            newBoard.unpickedBuildings.add(buildingName);
+        }
+        for (name in this.blueInventoryBuildings) {
+            newBoard.blueInventoryBuildings.add(name);
+        }
+        for (name in this.orangeInventoryBuildings) {
+            newBoard.orangeInventoryBuildings.add(name);
+        }
+
+        return newBoard;
     }
 }
 

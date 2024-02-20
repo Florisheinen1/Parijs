@@ -6,7 +6,7 @@ import java.net.Socket
 import java.util.*
 
 class Client(private val ui: UI) : Player {
-    private val board = Board();
+    private var board = Board();
 
     private var shouldExit = false;
     init {
@@ -14,14 +14,18 @@ class Client(private val ui: UI) : Player {
             override fun onUserAction(action: UserAction) {
                 when (action) {
                     is UserAction.CloseWindow -> {
-                        println("Received window close event. Closing Client!");
+//                        println("Received window close event. Closing Client!");
                         shouldExit = true
                     }
-                    is UserAction.Pass -> TODO()
-                    is UserAction.PickBuilding -> {
-                        println("Picked building: %s. Doing the shizzle!".format(action.buildingName));
+                    is UserAction.Pass -> {
+//                        println("Received user pass event");
                     }
-                    is UserAction.PlaceTileBlock -> TODO()
+                    is UserAction.PickBuilding -> {
+//                        println("Received user pick building: %s".format(action.buildingName));
+                    }
+                    is UserAction.PlaceTileBlock -> {
+                        println("Received user place tile event at (%d, %d)".format(action.position.x, action.position.y));
+                    }
                 }
             }
         });
@@ -62,14 +66,39 @@ class Client(private val ui: UI) : Player {
     }
 
     override fun startPart1(cards: List<Cards>) {
-        this.board.ingameCards = Vector(cards);
+        synchronized(this.board) {
+            // Reset the board
+            this.board = Board();
+
+            this.board.inGameCards = Vector(cards);
+            this.board.unpickedBuildings = Vector(BuildingName.entries);
+
+            for (i in 0..<8) {
+                this.board.unplacedBlueBlocks.add(null);
+                this.board.unplacedOrangeBlocks.add(null);
+            }
+
+            this.ui.updateGameState(this.board);
+        }
         this.ui.updatePhase(GuiPhase.GamePart1(false));
     }
 
     override fun askTurnPart1(availableBuildings: List<BuildingName>, topTileBlock: TileBlock?): MovePart1 {
+        println("We received the turn");
         // Update our board
-        this.board.unpickedBuildings = Vector(availableBuildings);
-        this.board.topBlueBlock = topTileBlock;
+        synchronized(this.board) {
+            this.board.unpickedBuildings = Vector(availableBuildings);
+
+            if (topTileBlock == null) {
+                // That means we do not have unplaced tileBlocks left.
+                println("No unplaced blocks left");
+                this.board.unplacedBlueBlocks.clear();
+            } else {
+                this.board.unplacedBlueBlocks[0] = topTileBlock;
+            }
+
+            this.ui.updateGameState(this.board);
+        }
 
         // Create action listener that stores user action here
         var move: MovePart1? = null;
@@ -77,7 +106,7 @@ class Client(private val ui: UI) : Player {
             override fun onUserAction(action: UserAction) {
                 when (action) {
                     is UserAction.PickBuilding -> move = MovePart1.PickBuilding(action.buildingName);
-                    is UserAction.PlaceTileBlock -> move = MovePart1.PlaceBlockAt(action.position);
+                    is UserAction.PlaceTileBlock -> move = MovePart1.PlaceBlockAt(action.position, action.tileBlock);
                     is UserAction.Pass -> move = MovePart1.Pass;
                     else -> {
                         println("Ignoring action that is not applicable: %s".format(action.toString()));
@@ -89,9 +118,6 @@ class Client(private val ui: UI) : Player {
         // Add action listener
         this.ui.addUserActionListener(listener);
 
-        // Update board representation in UI
-        this.ui.updateGameState(this.board);
-
         // Indicate the user is free to make the move
         this.ui.updatePhase(GuiPhase.GamePart1(true));
 
@@ -102,15 +128,26 @@ class Client(private val ui: UI) : Player {
         this.ui.removeUserActionListener(listener);
 
         val validatedMove: MovePart1 = move!!;
-
         // Update our own board representation
         when (validatedMove) {
             is MovePart1.Pass -> {}
             is MovePart1.PickBuilding -> {
-                this.board.pickBuilding(validatedMove.buildingName, PlayerColor.BLUE)
-                this.ui.updateGameState(this.board);
+                synchronized(this.board) {
+                    this.board.unpickedBuildings.removeElement(validatedMove.buildingName);
+                    this.board.blueInventoryBuildings.add(validatedMove.buildingName);
+                    this.ui.updateGameState(this.board);
+                }
+                println("Move: Pick building!");
             }
-            is MovePart1.PlaceBlockAt -> TODO()
+            is MovePart1.PlaceBlockAt -> {
+                synchronized(this.board) {
+                    this.board.placeTileBlock(validatedMove.position, validatedMove.tileBlock);
+                    this.board.unplacedBlueBlocks.removeAt(0);
+
+                    this.ui.updateGameState(this.board);
+                }
+                println("Move: Place block: " + validatedMove.tileBlock.topLeft.name + "," + validatedMove.tileBlock.topRight.name + "," + validatedMove.tileBlock.bottomLeft.name);
+            }
         }
 
         return validatedMove;
@@ -118,18 +155,27 @@ class Client(private val ui: UI) : Player {
 
     override fun respondToMove(response: MoveResponse) {
         println("Received response to movement: %s".format(response.toString()))
-        // TODO: Handle denials
     }
 
     override fun updateMovePart1(move: MovePart1) {
         when (move) {
             MovePart1.Pass -> println("Other opponent skipped its turn");
             is MovePart1.PickBuilding -> {
-                println("Opponent picked: '%s'".format(move.buildingName));
-                this.board.pickBuilding(move.buildingName, PlayerColor.ORANGE);
-                this.ui.updateGameState(this.board);
+                println("Opponent picked building: '%s'".format(move.buildingName));
+                synchronized(this.board) {
+                    this.board.unpickedBuildings.removeElement(move.buildingName);
+                    this.board.orangeInventoryBuildings.add(move.buildingName);
+
+                    this.ui.updateGameState(this.board);
+                }
             }
-            is MovePart1.PlaceBlockAt -> TODO()
+            is MovePart1.PlaceBlockAt -> {
+                println("Opponent placed tile block at (%d, %d)".format(move.position.x, move.position.y));
+                synchronized(this.board) {
+                    this.board.placeTileBlock(move.position, move.tileBlock);
+                    this.board.unplacedOrangeBlocks.removeAt(0);
+                }
+            }
         }
     }
 

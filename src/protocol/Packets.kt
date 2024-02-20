@@ -77,8 +77,8 @@ sealed class Packet {
     private fun movePart1ToString(move: MovePart1): String {
         return when (move) {
             MovePart1.Pass -> "PASS"
-            is MovePart1.PickBuilding -> "PICK" + Packet.DELIMITER + move.buildingName.name;
-            is MovePart1.PlaceBlockAt -> "PLACE" + Packet.DELIMITER + vecToString(move.position);
+            is MovePart1.PickBuilding -> "PICK" + DELIMITER + move.buildingName.name;
+            is MovePart1.PlaceBlockAt -> "PLACE" + DELIMITER + vecToString(move.position) + DELIMITER + tileBlockToString(move.tileBlock);
         }
     }
 
@@ -93,7 +93,6 @@ fun sanitize(s: String): String {
 
 class Parser {
     fun parsePacket(s: String): Packet {
-        println("Received packet: '%s'".format(s));
         val delimited = s.split(Packet.DELIMITER);
         return when (Packet.PACKET_HEADERS.valueOf(delimited[0])) {
             Packet.PACKET_HEADERS.WELCOME_TO_LOBBY -> Packet.WelcomeToLobby;
@@ -140,7 +139,7 @@ class Parser {
         return when (delimited[0]) {
             "PASS" -> MovePart1.Pass
             "PICK" -> MovePart1.PickBuilding(BuildingName.valueOf(delimited[1]))
-            "PLACE" -> MovePart1.PlaceBlockAt(vecFromString(delimited[1]))
+            "PLACE" -> MovePart1.PlaceBlockAt(vecFromString(delimited[1]), tileBlockFromString(delimited[2])!!)
             else -> throw ParseException("Failed to parse: '%s'.".format(s), 0);
         }
     }
