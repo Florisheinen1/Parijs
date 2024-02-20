@@ -29,7 +29,6 @@ open class Board {
             // TODO: Deny user move if this went wrong
             throw InvalidParameterException("Invalid args for PlaceBlock");
         }
-        println("Setting new tileBlock at (%d, %d)".format(tilePos.x, tilePos.y));
 
         this.setTile(tileBlock.topLeft, tilePos.x, tilePos.y);
         this.setTile(tileBlock.topRight, tilePos.x+1, tilePos.y);
@@ -344,6 +343,16 @@ class TileBlock(
             this.bottomLeft,
             this.bottomRight
         );
+    }
+
+    fun getInverted(): TileBlock {
+        val cp = this.copy();
+        cp.invert();
+        return cp;
+    }
+
+    override fun toString(): String {
+        return this.topLeft.name + "," + this.topRight.name + "," + this.bottomLeft.name + "," + this.bottomRight.name
     }
 }
 

@@ -28,6 +28,26 @@ sealed class MovePart1 {
     data class PlaceBlockAt(val position: Vec2, val tileBlock: TileBlock): MovePart1();
 
     data object Pass: MovePart1();
+
+    fun clone(): MovePart1 {
+        return when (this) {
+            is Pass -> Pass;
+            is PickBuilding -> PickBuilding(this.buildingName);
+            is PlaceBlockAt -> PlaceBlockAt(this.position, this.tileBlock.copy());
+        }
+    }
+
+    fun invert() {
+        if (this is PlaceBlockAt) {
+            this.tileBlock.invert();
+        }
+    }
+
+    fun getInverted(): MovePart1 {
+        val cp = this.clone();
+        cp.invert();
+        return cp;
+    }
 }
 
 sealed class MovePart2 {

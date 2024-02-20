@@ -75,9 +75,9 @@ class Gui : UI() {
                                 if (click.tileY % 2 == 0) click.tileY else click.tileY - 1
                         )
                         val tile = previousClick.tileBlock;
-                        println("Supposed to place block: " + tile.topLeft.name + "," + tile.topRight.name + ", " + tile.bottomLeft.name);
                         onUserAction(UserAction.PlaceTileBlock(pos, tile));
-
+                        previousClick.selectable.deselect();
+                        selectedClick = null;
                     }
                     else -> {}
                 }
