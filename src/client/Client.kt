@@ -91,7 +91,7 @@ class Client(private val ui: UI) : Player {
     }
 
     override fun askTurnPhase1(availableBuildings: List<BuildingName>, topTileBlock: TileBlock?): UserMove {
-        println("\nWe received the turn. TopBlock: %s".format(topTileBlock?.toString()));
+        println("\nWe received the turn. Available block: %s".format(topTileBlock?.toString()));
         // Update our board
         synchronized(this.board) {
             this.board.unpickedBuildings = Vector(availableBuildings);
@@ -150,7 +150,7 @@ class Client(private val ui: UI) : Player {
                 synchronized(this.board) {
                     this.board.placeTileBlock(validatedMove.position, validatedMove.tileBlock);
                     this.board.unplacedBlueBlocks.removeAt(0);
-
+                    println("Updating board...");
                     this.ui.updateGameState(this.board);
                 }
                 println(" -> Decided on: Place block: " + validatedMove.tileBlock.topLeft.name + "," + validatedMove.tileBlock.topRight.name + "," + validatedMove.tileBlock.bottomLeft.name + "," + validatedMove.tileBlock.bottomRight.name);

@@ -1,19 +1,18 @@
 package client
 
 import game.*
-import protocol.Packet
-import protocol.Parser
 import java.awt.*
 import java.awt.event.*
 import java.net.InetAddress
 import java.net.UnknownHostException
 import java.util.*
 import javax.swing.*
+import javax.swing.border.Border
 import javax.swing.border.EmptyBorder
+import javax.swing.border.LineBorder
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import javax.swing.text.BadLocationException
-import javax.swing.text.Position
 import kotlin.math.abs
 
 val INITIAL_GUI_PHASE = GuiPhase.Connecting;
@@ -36,26 +35,49 @@ sealed class UserClick {
     data class OnCard(val cardType: CardType, val cardState: CardState, val cardOwner: PlayerColor?) : UserClick();
 }
 
+interface UserClickEmitter {
+    fun emitUserClick(click: UserClick);
+    fun addUserClickListener(listener: UserClickListener);
+}
 interface UserClickListener {
     fun onUserClick(click: UserClick);
-    fun getSelectedClick(): UserClick?;
 }
 
 class Gui : UI() {
-    val userClickListener = object : UserClickListener {
-        override fun onUserClick(click: UserClick) {
-            handleUserClick(click);
+    private val userClickEmitter = object : UserClickEmitter {
+        private val listeners = Vector<UserClickListener>();
+
+        override fun emitUserClick(click: UserClick) {
+            for (listener in this.listeners) {
+                listener.onUserClick(click);
+            }
         }
-        override fun getSelectedClick(): UserClick? {
-            if (selectedClick == null) return null;
-            return selectedClick!!.first;
+        override fun addUserClickListener(listener: UserClickListener) {
+            this.listeners.add(listener);
         }
     }
 
-    val window = GameWindow(userClickListener);
+    private val window = GameWindow(userClickEmitter);
     private var guiPhase: GuiPhase = INITIAL_GUI_PHASE;
 
     private var selectedClick: Pair<UserClick, Selectable>? = null;
+
+    init {
+        this.window.addKeyListener(object : KeyAdapter() {
+            override fun keyPressed(e: KeyEvent?) {
+                super.keyPressed(e);
+                if (e == null) return;
+                if (e.keyCode == KeyEvent.VK_SPACE) {
+                    println("Pressed rotate button");
+                }
+            }
+        })
+        this.userClickEmitter.addUserClickListener(object : UserClickListener {
+            override fun onUserClick(click: UserClick) {
+                handleUserClick(click);
+            }
+        })
+    }
 
     private fun handleUserClick(click: UserClick) {
         when (click) {
@@ -185,12 +207,12 @@ class Gui : UI() {
     }
 }
 
-class GameWindow(private val userClickListener: UserClickListener) : JFrame() {
+class GameWindow(private val userClickEmitter: UserClickEmitter) : JFrame() {
 
-    private val screenBoard = ScreenBoard(userClickListener);
+    private val screenBoard = ScreenBoard(userClickEmitter);
     private val bluePlayerArea = PlayerPanel(PlayerColor.BLUE);
     private val orangePlayerArea = PlayerPanel(PlayerColor.ORANGE);
-    private val bottomPanel = BottomPanel(userClickListener);
+    private val bottomPanel = BottomPanel(userClickEmitter);
 
     init {
         this.setTitle("Parijs");
@@ -209,7 +231,7 @@ class GameWindow(private val userClickListener: UserClickListener) : JFrame() {
         this.addWindowListener(object : WindowAdapter() {
             override fun windowClosing(e: WindowEvent?) {
                 super.windowClosing(e)
-                userClickListener.onUserClick(UserClick.CloseButton);
+                userClickEmitter.emitUserClick(UserClick.CloseButton);
             }
         })
 
@@ -228,15 +250,15 @@ class GameWindow(private val userClickListener: UserClickListener) : JFrame() {
     }
 }
 
-class BottomPanel(private val userClickListener: UserClickListener) : JPanel() {
+class BottomPanel(private val userClickEmitter: UserClickEmitter) : JPanel() {
     private val unpickedBuildings = BuildingCollection(object : BuildingSelectionListener {
         override fun onSelect(building: BuildingName) {
-            userClickListener.onUserClick(UserClick.UnpickedBuilding(building));
+            userClickEmitter.emitUserClick(UserClick.UnpickedBuilding(building));
         }
     });
 
-    private val rightPanel = BottomRightPanel(userClickListener);
-    private val cardsPanel = CardsCollection(userClickListener);
+    private val rightPanel = BottomRightPanel(userClickEmitter);
+    private val cardsPanel = CardsCollection(userClickEmitter);
 
     init {
         this.layout = BorderLayout();
@@ -253,7 +275,7 @@ class BottomPanel(private val userClickListener: UserClickListener) : JPanel() {
     }
 }
 
-class ScreenCard(val userClickListener: UserClickListener) : JComponent() {
+class ScreenCard(val userClickEmitter: UserClickEmitter) : JComponent() {
     private var cardType: CardType? = null;
     private var cardState = CardState.UNPICKED_AND_UNUSED;
     private var cardOwner: PlayerColor? = null;
@@ -277,7 +299,7 @@ class ScreenCard(val userClickListener: UserClickListener) : JComponent() {
             override fun mouseClicked(e: MouseEvent?) {
                 if (e == null) return;
                 if (cardType == null) return;
-                userClickListener.onUserClick(UserClick.OnCard(cardType!!, cardState, cardOwner))
+                userClickEmitter.emitUserClick(UserClick.OnCard(cardType!!, cardState, cardOwner))
             }
         })
     }
@@ -324,7 +346,7 @@ class ScreenCard(val userClickListener: UserClickListener) : JComponent() {
     }
 }
 
-class CardsCollection(userClickListener: UserClickListener) : JPanel() {
+class CardsCollection(userClickEmitter: UserClickEmitter) : JPanel() {
     private val screenCards = Vector<ScreenCard>();
     private val CARD_COLS = 2;
     private val CARD_ROWS = 4;
@@ -335,7 +357,7 @@ class CardsCollection(userClickListener: UserClickListener) : JPanel() {
         this.preferredSize = Dimension(SIZE, SIZE);
 
         for (i in 0..<8) {
-            val card = ScreenCard(userClickListener);
+            val card = ScreenCard(userClickEmitter);
             this.screenCards.add(card);
             this.add(card);
         }
@@ -350,7 +372,7 @@ class CardsCollection(userClickListener: UserClickListener) : JPanel() {
     }
 }
 
-class BottomRightPanel(private val userClickListener: UserClickListener) : JPanel() {
+class BottomRightPanel(private val userClickEmitter: UserClickEmitter) : JPanel() {
     private val WIDTH = 200;
     private val BORDER_SIZE = 10;
     private val message = JLabel("Text goes here");
@@ -359,20 +381,33 @@ class BottomRightPanel(private val userClickListener: UserClickListener) : JPane
 
     private val passButton = JButton("Skip turn");
 
-    init {
-        this.unplacedTileBlock.addTileBlockClickListener(object : TileBlockClickListener {
-            override fun onSelectedTile(tileBlock: TileBlock, relTileX: Int, relTileY: Int) {
-                userClickListener.onUserClick(UserClick.SelectUnplacedTileBlock(tileBlock, object : Selectable {
-                    override fun select() {
-                        unplacedTileBlock.border = BorderFactory.createLineBorder(Color.BLACK, 5);
-                    }
+    private var tileBlockIsHovered = false;
+    private var tileBlockIsSelected = false;
 
+    init {
+        this.unplacedTileBlock.addTileBlockClickListener(object : TileBlockMouseListener {
+            override fun onSelectedTile(tileBlock: TileBlock, relTileX: Int, relTileY: Int) {
+                userClickEmitter.emitUserClick(UserClick.SelectUnplacedTileBlock(tileBlock, object : Selectable {
+                    override fun select() {
+                        tileBlockIsSelected = true;
+                        updateTileBlockBorder()
+                    }
                     override fun deselect() {
-                        unplacedTileBlock.border = BorderFactory.createLineBorder(Color.WHITE, 5);
+                        tileBlockIsSelected = false;
+                        updateTileBlockBorder()
                     }
                 }));
             }
+            override fun onAbsoluteMouseEnter(e: MouseEvent) {
+                tileBlockIsHovered = true;
+                updateTileBlockBorder();
+            }
+            override fun onAbsoluteMouseExit(e: MouseEvent) {
+                tileBlockIsHovered = false;
+                updateTileBlockBorder();
+            }
         })
+        this.updateTileBlockBorder();
 
         this.preferredSize = Dimension(WIDTH, WIDTH);
 
@@ -381,8 +416,15 @@ class BottomRightPanel(private val userClickListener: UserClickListener) : JPane
 
         this.add(message);
         this.add(unplacedTileBlock);
+        this.passButton.isFocusable = false;
         this.add(passButton);
 
+    }
+
+    private fun updateTileBlockBorder() {
+        var borderColor = if (this.tileBlockIsHovered) Color.BLACK else Color.WHITE;
+        if (this.tileBlockIsSelected) borderColor = Color.RED;
+        unplacedTileBlock.border = BorderFactory.createLineBorder(borderColor, 5);
     }
 
     fun updateBoard(newBoard: Board) {
@@ -437,8 +479,6 @@ class ScreenTile(type: Tile = Tile.BRICKS) : JComponent() {
     var isHovered = false;
 
     init {
-        this.cursor = Cursor(Cursor.HAND_CURSOR);
-
         this.addMouseListener(object : MouseAdapter() {
             override fun mouseEntered(e: MouseEvent?) {
                 isHovered = true;
@@ -500,8 +540,10 @@ class ScreenTile(type: Tile = Tile.BRICKS) : JComponent() {
     }
 }
 
-interface TileBlockClickListener {
+interface TileBlockMouseListener {
     fun onSelectedTile(tileBlock: TileBlock, relTileX: Int, relTileY: Int);
+    fun onAbsoluteMouseEnter(e: MouseEvent);
+    fun onAbsoluteMouseExit(e: MouseEvent);
 }
 
 open class ScreenTileBlock : JPanel() {
@@ -511,7 +553,7 @@ open class ScreenTileBlock : JPanel() {
     private val bottomRightTile = ScreenTile();
     private var isHovered = false;
 
-    private val tileBlockClickListeners = Vector<TileBlockClickListener>();
+    private val tileBlockMouseListeners = Vector<TileBlockMouseListener>();
 
     init {
         this.layout = GridLayout(2, 2, 0, 0);
@@ -569,49 +611,44 @@ open class ScreenTileBlock : JPanel() {
         this.add(bottomRightTile);
     }
 
-    fun addTileBlockClickListener(listener: TileBlockClickListener) {
-        synchronized(this.tileBlockClickListeners) {
-            this.tileBlockClickListeners.add(listener);
-        }
-    }
-    fun removeTileBlockClickListener(listener: TileBlockClickListener) {
-        synchronized(this.tileBlockClickListeners) {
-            this.tileBlockClickListeners.removeElement(listener);
+    fun addTileBlockClickListener(listener: TileBlockMouseListener) {
+        synchronized(this.tileBlockMouseListeners) {
+            this.tileBlockMouseListeners.add(listener);
         }
     }
     private fun fireTileBlockClickEvent(tileBlock: TileBlock, relTileX: Int, relTileY: Int) {
-        synchronized(this.tileBlockClickListeners) {
-            for (listener in this.tileBlockClickListeners) {
+        synchronized(this.tileBlockMouseListeners) {
+            for (listener in this.tileBlockMouseListeners) {
                 listener.onSelectedTile(tileBlock, relTileX, relTileY);
             }
         }
     }
 
-    private fun containsScreenPoint(point: Point): Boolean {
-        return Rectangle(this.locationOnScreen, Dimension(this.width, this.height)).contains(point);
-    }
+    private fun containsScreenPoint(point: Point) = Rectangle(this.locationOnScreen, Dimension(this.width, this.height)).contains(point);
 
     fun handleChildMouseExitEvent(e: MouseEvent) {
         if (!this.containsScreenPoint(e.locationOnScreen)) {
             if (this.isHovered) {
                 absoluteMouseExited(e);
-            }
-        }
-    }
+    }}}
     fun handleChildMouseEnterEvent(e: MouseEvent) {
         if (this.containsScreenPoint(e.locationOnScreen)) {
             if (!this.isHovered) {
                 absoluteMouseEntered(e);
-            }
-        }
-    }
+    }}}
 
     fun absoluteMouseEntered(e: MouseEvent) {
         this.isHovered = true;
+        synchronized(this.tileBlockMouseListeners) {
+            for (listener in this.tileBlockMouseListeners) { listener.onAbsoluteMouseEnter(e); }
+        }
         this.repaint();
     }
     fun absoluteMouseExited(e: MouseEvent) {
         this.isHovered = false;
+        synchronized(this.tileBlockMouseListeners) {
+            for (listener in this.tileBlockMouseListeners) { listener.onAbsoluteMouseExit(e); }
+        }
         this.repaint();
     }
 
@@ -621,27 +658,95 @@ open class ScreenTileBlock : JPanel() {
         this.bottomLeftTile.updateTileType(newTileBlock.bottomLeft);
         this.bottomRightTile.updateTileType(newTileBlock.bottomRight);
     }
+
+    fun getDisplayedTileBlock(): TileBlock {
+        return TileBlock(Direction.NORTH, this.topLeftTile.tileType, this.topRightTile.tileType, this.bottomLeftTile.tileType, this.bottomRightTile.tileType);
+    }
+
+    override fun paintComponent(g: Graphics?) {
+        super.paintComponent(g)
+        if (g == null) return;
+        if (this.isHovered) {
+            g.color = Color.MAGENTA;
+        } else {
+            g.color = Color.BLACK;
+        }
+        g.fillRect(0, 0, width, height);
+    }
 }
 
-class ScreenBoardTileLayer(val clickListener: UserClickListener) : JPanel() {
+class ScreenBoardTileLayer(val userClickEmitter: UserClickEmitter) : JPanel() {
     private val BLOCK_COLS = 4;
     private val BLOCK_ROWS = 4;
 
     private val tileBlocks = Vector<ScreenTileBlock>();
 
     init {
-        this.layout = GridLayout(BLOCK_ROWS, BLOCK_COLS, 5, 5);
+        this.layout = GridLayout(BLOCK_ROWS, BLOCK_COLS, 0, 0);
         for (row in 0..<BLOCK_ROWS) {
             for (column in 0..<BLOCK_COLS) {
                 val tileBlock = ScreenTileBlock();
-                tileBlock.addTileBlockClickListener(object : TileBlockClickListener {
-                    override fun onSelectedTile(tileBlock: TileBlock, relTileX: Int, relTileY: Int) {
-                        val tileX = column * 2 + relTileX;
-                        val tileY = row * 2 + relTileY;
 
-                        clickListener.onUserClick(UserClick.OnBoard(tileX, tileY));
+                val hoverManager = object : TileBlockMouseListener, UserClickListener {
+                    var unplacedTileBlock: TileBlock? = null;
+                    var originalTileBlock: TileBlock? = null;
+                    var isReplaced = false;
+
+                    override fun onUserClick(click: UserClick) {
+                        synchronized(tileBlock) {
+                            if (click is UserClick.SelectUnplacedTileBlock) {
+                                unplacedTileBlock = click.tileBlock.copy();
+                                // We want to place a tileblock
+                                if (tileBlock.getDisplayedTileBlock().topLeft != Tile.BRICKS) {
+                                    tileBlock.cursor = Cursor.getSystemCustomCursor("Invalid.32x32");
+//                                    tileBlock.cursor = Cursor(Cursor.WAIT_CURSOR);
+                                    println("Setting cursor to invalid")
+                                } else {
+                                    tileBlock.cursor = Cursor(Cursor.HAND_CURSOR);
+                                    println("Setting cursor to valid");
+                                }
+                            } else {
+                                unplacedTileBlock = null;
+                                tileBlock.cursor = Cursor.getDefaultCursor();
+                                println("Restoring cursor");
+                            }
+                            isReplaced = false;
+                        }
                     }
-                });
+                    override fun onSelectedTile(tileBlock: TileBlock, relTileX: Int, relTileY: Int) {
+                        synchronized(tileBlock) {
+                            userClickEmitter.emitUserClick(UserClick.OnBoard(column*2 + relTileX, row*2 + relTileY))
+                        }
+                    }
+                    override fun onAbsoluteMouseEnter(e: MouseEvent) {
+                        synchronized(tileBlock) {
+                            if (unplacedTileBlock != null) {
+                                val current = tileBlock.getDisplayedTileBlock();
+                                if (current.topLeft == Tile.BRICKS) {
+                                    originalTileBlock = current.copy();
+                                    tileBlock.updateTiles(unplacedTileBlock!!.copy());
+                                    isReplaced = true;
+//                                    cursor = Cursor(Cursor.HAND_CURSOR);
+                                } else {
+//                                    cursor = Cursor.getSystemCustomCursor("Invalid.32x32");
+                                }
+                            }
+                        }
+                    }
+                    override fun onAbsoluteMouseExit(e: MouseEvent) {
+                        synchronized(tileBlock) {
+                            if (isReplaced) {
+                                tileBlock.updateTiles(originalTileBlock!!);
+                                isReplaced = false;
+                                originalTileBlock = null;
+                            }
+                        }
+                    }
+                }
+
+                tileBlock.addTileBlockClickListener(hoverManager);
+                userClickEmitter.addUserClickListener(hoverManager);
+
                 this.add(tileBlock);
                 this.tileBlocks.add(tileBlock);
             }
@@ -674,10 +779,10 @@ class ScreenBoardTileLayer(val clickListener: UserClickListener) : JPanel() {
     }
 }
 
-class ScreenBoard(clickListener: UserClickListener) : JLayeredPane() {
-    private val BOARD_SIZE = 200;
+class ScreenBoard(userClickEmitter: UserClickEmitter) : JLayeredPane() {
+    private val BOARD_SIZE = 300;
 
-    val tileLayer = ScreenBoardTileLayer(clickListener);
+    val tileLayer = ScreenBoardTileLayer(userClickEmitter);
 
     init {
         this.add(tileLayer, DEFAULT_LAYER);
@@ -704,7 +809,7 @@ class ScreenBoard(clickListener: UserClickListener) : JLayeredPane() {
     }
 }
 
-class ScreenBuilding(var building: Building) : JComponent() {
+class ScreenBuilding(val building: Building) : JComponent() {
     private val borderSize = 5;
     var isHovered = false;
     var selectionListener: BuildingSelectionListener? = null;
@@ -724,7 +829,7 @@ class ScreenBuilding(var building: Building) : JComponent() {
             }
             override fun mouseClicked(e: MouseEvent?) {
                 if (selectionListener == null) return;
-                selectionListener!!.onSelect(building.name);
+                selectionListener!!.onSelect(building.getName());
             }
         })
         this.cursor = Cursor(Cursor.HAND_CURSOR);
@@ -761,7 +866,7 @@ class ScreenBuilding(var building: Building) : JComponent() {
     }
 
     private fun getScreenRects(): Vector<Rectangle> {
-        val relativeDimension = building.getDimension();
+        val relativeDimension = building.getSize();
         val xUnit = width / relativeDimension.x;
         val yUnit = height / relativeDimension.y;
 
@@ -831,13 +936,13 @@ class BuildingCollection(private val buildingSelectionListener: BuildingSelectio
         val collectionTop = borderSize;
 
         for (screenBuilding in this.screenBuildingChildren) {
-            val relativeOffset = getRelativeBuildingUnits(screenBuilding.building.name);
+            val relativeOffset = getRelativeBuildingUnits(screenBuilding.building.getName());
             val absoluteOffset = Vec2(
                     relativeOffset.x * UNIT_SIZE,
                     relativeOffset.y * UNIT_SIZE
             );
 
-            val relativeDimension = screenBuilding.building.getDimension();
+            val relativeDimension = screenBuilding.building.getSize();
             val absoluteDimension = Vec2(
                     relativeDimension.x * UNIT_SIZE,
                     relativeDimension.y * UNIT_SIZE

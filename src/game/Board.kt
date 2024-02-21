@@ -175,143 +175,103 @@ enum class BuildingName {
     CHONK,
 }
 
-class Building(
-        val name: BuildingName,
-        direction: Direction,
-        parts: Array<Vec2>,
-        val owner: PlayerColor? = null) : Placeable(direction, parts) {
-
+sealed class Building(val parts: Array<Vec2>) {
     companion object {
-        fun fromName(name: BuildingName): Building {
-            return when (name) {
-                BuildingName.SMILE -> Building(
-                        name,
-                        Direction.NORTH,
-                        arrayOf(
-                                Vec2(0, 0),
-                                Vec2(0, 1),
-                                Vec2(1, 0),
-                                Vec2(2, 0),
-                                Vec2(3, 0),
-                                Vec2(3, 1)
-                        )
-                )
-                BuildingName.BIG_L -> Building(
-                        name,
-                        Direction.NORTH,
-                        arrayOf(
-                                Vec2(0, 0),
-                                Vec2(0, 1),
-                                Vec2(0, 2),
-                                Vec2(0, 3),
-                                Vec2(1, 0),
-                                Vec2(2, 0),
-                        )
-                )
-                BuildingName.SMALL_L -> Building(
-                        name,
-                        Direction.NORTH,
-                        arrayOf(
-                                Vec2(0, 0),
-                                Vec2(1, 0),
-                                Vec2(1, 1),
-                                Vec2(1, 2),
-                        )
-                )
-                BuildingName.BIG_T -> Building(
-                        name,
-                        Direction.NORTH,
-                        arrayOf(
-                                Vec2(1, 0),
-                                Vec2(1, 1),
-                                Vec2(1, 2),
-                                Vec2(0, 2),
-                                Vec2(2, 2),
-                        )
-                )
-                BuildingName.SMALL_T -> Building(
-                        name,
-                        Direction.NORTH,
-                        arrayOf(
-                                Vec2(0, 0),
-                                Vec2(0, 1),
-                                Vec2(0, 2),
-                                Vec2(1, 1),
-                        )
-                )
-                BuildingName.CORNER -> Building(
-                        name,
-                        Direction.NORTH,
-                        arrayOf(
-                                Vec2(1, 1),
-                                Vec2(1, 0),
-                                Vec2(0, 1),
-                        )
-                )
-                BuildingName.SQUARE -> Building(
-                        name,
-                        Direction.NORTH,
-                        arrayOf(
-                                Vec2(0, 0),
-                                Vec2(1, 0),
-                                Vec2(0, 1),
-                                Vec2(1, 1),
-                        )
-                )
-                BuildingName.STAIRS -> Building(
-                        name,
-                        Direction.NORTH,
-                        arrayOf(
-                                Vec2(0, 2),
-                                Vec2(1, 2),
-                                Vec2(1, 1),
-                                Vec2(2, 1),
-                                Vec2(2, 0),
-                        )
-                )
-                BuildingName.ZIGZAG -> Building(
-                        name,
-                        Direction.NORTH,
-                        arrayOf(
-                                Vec2(0, 0),
-                                Vec2(0, 1),
-                                Vec2(1, 1),
-                                Vec2(1, 2),
-                        )
-                )
-                BuildingName.CROSS -> Building(
-                        name,
-                        Direction.NORTH,
-                        arrayOf(
-                                Vec2(1, 0),
-                                Vec2(1, 1),
-                                Vec2(0, 1),
-                                Vec2(1, 2),
-                                Vec2(2, 1),
-                        )
-                )
-                BuildingName.LINE -> Building(
-                        name,
-                        Direction.NORTH,
-                        arrayOf(
-                                Vec2(0, 0),
-                                Vec2(1, 0),
-                                Vec2(2, 0),
-                        )
-                )
-                BuildingName.CHONK -> Building(
-                        name,
-                        Direction.NORTH,
-                        arrayOf(
-                                Vec2(0, 1),
-                                Vec2(1, 0),
-                                Vec2(1, 1),
-                                Vec2(2, 0),
-                                Vec2(2, 1),
-                        )
-                )
+        fun fromName(buildingName: BuildingName, targetRotation: Direction = Direction.NORTH) : Building {
+            val building = when (buildingName) {
+                BuildingName.SMILE -> Smile;
+                BuildingName.BIG_L -> BigL;
+                BuildingName.SMALL_L -> SmallL;
+                BuildingName.BIG_T -> BigT;
+                BuildingName.SMALL_T -> SmallT;
+                BuildingName.CORNER -> Corner;
+                BuildingName.SQUARE -> Square;
+                BuildingName.STAIRS -> Stairs;
+                BuildingName.ZIGZAG -> Zigzag;
+                BuildingName.CROSS -> Cross;
+                BuildingName.LINE -> Line;
+                BuildingName.CHONK -> Chonk;
+            };
+            when (targetRotation) {
+                Direction.NORTH -> {} // Do nothing. Buildings start at rotation to north
+                Direction.EAST -> building.rotate(true);
+                Direction.SOUTH -> {
+                    building.rotate(true);
+                    building.rotate(true);
+                }
+                Direction.WEST -> building.rotate(false);
             }
+            return building;
         }
+    }
+
+    var rotation = Direction.NORTH;
+    data object Smile : Building(arrayOf(Vec2(0, 0), Vec2(0, 1), Vec2(1, 0), Vec2(2, 0), Vec2(3, 0), Vec2(3, 1)));
+    data object BigL : Building(arrayOf(Vec2(0, 0), Vec2(0, 1), Vec2(0, 2), Vec2(0, 3), Vec2(1, 0), Vec2(2, 0)));
+    data object SmallL : Building(arrayOf(Vec2(0, 0), Vec2(1, 0), Vec2(1, 1), Vec2(1, 2)));
+    data object BigT : Building(arrayOf(Vec2(1, 0), Vec2(1, 1), Vec2(1, 2), Vec2(0, 2), Vec2(2, 2)));
+    data object SmallT : Building(arrayOf(Vec2(0, 0), Vec2(0, 1), Vec2(0, 2), Vec2(1, 1)));
+    data object Corner : Building(arrayOf(Vec2(1, 1), Vec2(1, 0), Vec2(0, 1)));
+    data object Square : Building(arrayOf(Vec2(0, 0), Vec2(1, 0), Vec2(0, 1), Vec2(1, 1)));
+    data object Stairs : Building(arrayOf(Vec2(0, 2), Vec2(1, 2), Vec2(1, 1), Vec2(2, 1), Vec2(2, 0)));
+    data object Zigzag : Building(arrayOf(Vec2(0, 0), Vec2(0, 1), Vec2(1, 1), Vec2(1, 2)));
+    data object Cross : Building(arrayOf(Vec2(1, 0), Vec2(1, 1), Vec2(0, 1), Vec2(1, 2), Vec2(2, 1)));
+    data object Line : Building(arrayOf(Vec2(0, 0), Vec2(1, 0), Vec2(2, 0)));
+    data object Chonk : Building(arrayOf(Vec2(0, 1), Vec2(1, 0), Vec2(1, 1), Vec2(2, 0), Vec2(2, 1)));
+
+    fun getName(): BuildingName {
+        return when (this) {
+            BigL -> BuildingName.BIG_L
+            BigT -> BuildingName.BIG_T
+            Chonk -> BuildingName.CHONK
+            Corner -> BuildingName.CORNER
+            Cross -> BuildingName.CROSS
+            Line -> BuildingName.LINE
+            SmallL -> BuildingName.SMALL_L
+            SmallT -> BuildingName.SMALL_T
+            Smile -> BuildingName.SMILE
+            Square -> BuildingName.SQUARE
+            Stairs -> BuildingName.STAIRS
+            Zigzag -> BuildingName.ZIGZAG
+        }
+    }
+
+    fun getSize(): Vec2 {
+        val origin = this.getOrigin();
+        val end = Vec2(origin.x, origin.y);
+        for (part in this.parts) {
+            if (part.x > end.x) end.x = part.x;
+            if (part.y > end.y) end.y = part.y;
+        }
+        return Vec2(end.x - origin.x + 1, end.y - origin.y + 1);
+    }
+
+    private fun getOrigin(): Vec2 {
+        var minX = this.parts[0].x;
+        var minY = this.parts[0].y;
+        for (part in this.parts) {
+            if (part.x < minX) minX = part.x;
+            if (part.y < minY) minY = part.y;
+        }
+        return Vec2(minX, minY);
+    }
+    private fun move(offset: Vec2) {
+        for (part in this.parts) {
+            part.x += offset.x;
+            part.y += offset.y;
+        }
+    }
+    private fun normalize() {
+        val origin = this.getOrigin();
+        val offset = Vec2(-origin.x, -origin.y);
+        this.move(offset);
+    }
+    fun rotate(clockwise: Boolean) {
+        for (part in this.parts) {
+            part.rotate(clockwise);
+        }
+        this.normalize();
+        this.rotation.rotate(clockwise);
     }
 }
 
