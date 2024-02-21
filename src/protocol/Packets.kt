@@ -13,55 +13,58 @@ sealed class Packet {
 
     enum class PACKET_HEADERS {
         WELCOME_TO_LOBBY,
-        STARTED_PART_1,
-        ASK_FOR_MOVE_PART_1,
-        REPLY_WITH_MOVE_PART_1,
-        RESPOND_TO_MOVE_PART_1,
-        UPDATE_WITH_MOVE_PART_1,
-        STARTED_PART_2,
+        STARTED_PHASE_1,
+        STARTED_PHASE_2,
+        ASK_FOR_MOVE_PHASE_1,
+        ASK_FOR_MOVE_PHASE_2,
+        REPLY_WITH_MOVE,
+        RESPOND_TO_MOVE,
+        UPDATE_WITH_MOVE,
     }
 
     data object WelcomeToLobby : Packet();
-    data class Part1Started(val selectedCards: List<CardType>) : Packet();
-    data class AskForMovePart1(val availableBuildings: List<BuildingName>, val topTileBlock: TileBlock?) : Packet();
-    data class ReplyWithMovePart1(val move: MovePart1) : Packet();
-    data class RespondToMovePart1(val moveResponse: MoveResponse) : Packet();
-    data class UpdateWithMovePart1(val move: MovePart1) : Packet();
-    data object Part2Started : Packet();
+    data class StartedPhase1(val selectedCards: List<CardType>) : Packet();
+    data object StartedPhase2 : Packet();
+    data class AskForMovePhase1(val availableBuildings: List<BuildingName>, val topTileBlock: TileBlock?) : Packet();
+    data object AskForMovePhase2 : Packet();
+    data class ReplyWithMove(val move: UserMove) : Packet();
+    data class RespondToMove(val moveResponse: MoveResponse) : Packet();
+    data class UpdateWithMove(val move: UserMove) : Packet();
 
     fun serialize(): String {
         when (this) {
-            is WelcomeToLobby -> {
-                return PACKET_HEADERS.WELCOME_TO_LOBBY.name;
-            }
-            is Part1Started -> {
+            is WelcomeToLobby -> return PACKET_HEADERS.WELCOME_TO_LOBBY.name;
+            is StartedPhase1 -> {
                 val cardsString = enumListToString(selectedCards);
-                return PACKET_HEADERS.STARTED_PART_1.name + DELIMITER + cardsString;
+                return PACKET_HEADERS.STARTED_PHASE_1.name + DELIMITER + cardsString;
             }
-            is AskForMovePart1 -> {
+            is StartedPhase2 -> return PACKET_HEADERS.STARTED_PHASE_2.name;
+            is AskForMovePhase1 -> {
                 val buildingsString = enumListToString(this.availableBuildings);
                 val tileBlockString = tileBlockToString(this.topTileBlock);
-                return PACKET_HEADERS.ASK_FOR_MOVE_PART_1.name + DELIMITER + buildingsString + DELIMITER + tileBlockString;
+                return PACKET_HEADERS.ASK_FOR_MOVE_PHASE_1.name + DELIMITER + buildingsString + DELIMITER + tileBlockString;
             };
-            is ReplyWithMovePart1 -> {
-                return PACKET_HEADERS.REPLY_WITH_MOVE_PART_1.name + DELIMITER + movePart1ToString(this.move);
+            is AskForMovePhase2 -> {
+                return PACKET_HEADERS.ASK_FOR_MOVE_PHASE_2.name;
             }
-            is RespondToMovePart1 -> {
-                return PACKET_HEADERS.RESPOND_TO_MOVE_PART_1.name + DELIMITER + moveResponseToString(this.moveResponse);
+            is ReplyWithMove -> {
+                return PACKET_HEADERS.REPLY_WITH_MOVE.name + DELIMITER + userMoveToString(this.move);
             }
-            is UpdateWithMovePart1 -> {
-                return PACKET_HEADERS.UPDATE_WITH_MOVE_PART_1.name + DELIMITER + movePart1ToString(this.move);
+            is RespondToMove -> {
+                return PACKET_HEADERS.RESPOND_TO_MOVE.name + DELIMITER + moveResponseToString(this.moveResponse);
             }
-            is Part2Started -> return PACKET_HEADERS.STARTED_PART_2.name;
+            is UpdateWithMove -> {
+                return PACKET_HEADERS.UPDATE_WITH_MOVE.name + DELIMITER + userMoveToString(this.move);
+            }
         }
     }
 
     private fun<T> enumListToString(l: List<T>): String {
         return l.joinToString(
-                prefix = Packet.LIST_PREFIX,
-                separator = Packet.LIST_SEPARATOR,
-                postfix = Packet.LIST_SUFFIX,
-                transform = { it.toString() }
+            prefix = LIST_PREFIX,
+            separator = LIST_SEPARATOR,
+            postfix = LIST_SUFFIX,
+            transform = { it.toString() }
         );
     }
 
@@ -77,11 +80,14 @@ sealed class Packet {
         }
     }
 
-    private fun movePart1ToString(move: MovePart1): String {
+    private fun userMoveToString(move: UserMove): String {
         return when (move) {
-            MovePart1.Pass -> "PASS"
-            is MovePart1.PickBuilding -> "PICK" + DELIMITER + move.buildingName.name;
-            is MovePart1.PlaceBlockAt -> "PLACE" + DELIMITER + vecToString(move.position) + DELIMITER + tileBlockToString(move.tileBlock);
+            UserMove.Pass -> "PASS"
+            is UserMove.PickBuilding -> "PICK_BUILDING" + DELIMITER + move.buildingName.name;
+            is UserMove.PlaceBlockAt -> "PLACE_BLOCK" + DELIMITER + vecToString(move.position) + DELIMITER + tileBlockToString(move.tileBlock);
+
+            is UserMove.PlaceBuilding -> "PLACE_BUILDING" + DELIMITER + vecToString(move.position) + DELIMITER + move.buildingName.name;
+            is UserMove.CardAction -> TODO();
         }
     }
 
@@ -99,30 +105,31 @@ class Parser {
         val delimited = s.split(Packet.DELIMITER);
         return when (Packet.PACKET_HEADERS.valueOf(delimited[0])) {
             Packet.PACKET_HEADERS.WELCOME_TO_LOBBY -> Packet.WelcomeToLobby;
-            Packet.PACKET_HEADERS.STARTED_PART_1 -> {
-                val cardsString = s.removePrefix(Packet.PACKET_HEADERS.STARTED_PART_1.name + Packet.DELIMITER);
+            Packet.PACKET_HEADERS.STARTED_PHASE_1 -> {
+                val cardsString = s.removePrefix(Packet.PACKET_HEADERS.STARTED_PHASE_1.name + Packet.DELIMITER);
                 val cards = parseList(cardsString).map { CardType.valueOf(it) }
-                Packet.Part1Started(cards);
+                Packet.StartedPhase1(cards);
             }
-            Packet.PACKET_HEADERS.ASK_FOR_MOVE_PART_1 -> {
+            Packet.PACKET_HEADERS.STARTED_PHASE_2 -> Packet.StartedPhase2;
+            Packet.PACKET_HEADERS.ASK_FOR_MOVE_PHASE_1 -> {
                 val parsedBuildingsList = parseList(delimited[1]);
                 val buildings = if (parsedBuildingsList[0].isEmpty()) emptyList() else parsedBuildingsList.map { BuildingName.valueOf(it) }
                 val tileBlock = tileBlockFromString(delimited[2]);
-                return Packet.AskForMovePart1(buildings, tileBlock);
+                return Packet.AskForMovePhase1(buildings, tileBlock);
             }
-            Packet.PACKET_HEADERS.REPLY_WITH_MOVE_PART_1 -> {
-                val move = movePart1FromString(s.removePrefix(Packet.PACKET_HEADERS.REPLY_WITH_MOVE_PART_1.name + Packet.DELIMITER));
-                return Packet.ReplyWithMovePart1(move);
+            Packet.PACKET_HEADERS.ASK_FOR_MOVE_PHASE_2 -> return Packet.AskForMovePhase2;
+            Packet.PACKET_HEADERS.REPLY_WITH_MOVE -> {
+                val move = userMoveFromString(s.removePrefix(Packet.PACKET_HEADERS.REPLY_WITH_MOVE.name + Packet.DELIMITER));
+                return Packet.ReplyWithMove(move);
             }
-            Packet.PACKET_HEADERS.RESPOND_TO_MOVE_PART_1 -> {
+            Packet.PACKET_HEADERS.RESPOND_TO_MOVE -> {
                 val moveResponse = moveResponseFromString(delimited[1]);
-                return Packet.RespondToMovePart1(moveResponse);
+                return Packet.RespondToMove(moveResponse);
             }
-            Packet.PACKET_HEADERS.UPDATE_WITH_MOVE_PART_1 -> {
-                val move = movePart1FromString(s.removePrefix(Packet.PACKET_HEADERS.UPDATE_WITH_MOVE_PART_1.name + Packet.DELIMITER));
-                return Packet.UpdateWithMovePart1(move)
+            Packet.PACKET_HEADERS.UPDATE_WITH_MOVE -> {
+                val move = userMoveFromString(s.removePrefix(Packet.PACKET_HEADERS.UPDATE_WITH_MOVE.name + Packet.DELIMITER));
+                return Packet.UpdateWithMove(move)
             }
-            Packet.PACKET_HEADERS.STARTED_PART_2 -> Packet.Part2Started;
         }
     }
 
@@ -138,12 +145,14 @@ class Parser {
         };
     }
 
-    private fun movePart1FromString(s: String): MovePart1 {
+    private fun userMoveFromString(s: String): UserMove {
         val delimited = s.split(Packet.DELIMITER);
         return when (delimited[0]) {
-            "PASS" -> MovePart1.Pass
-            "PICK" -> MovePart1.PickBuilding(BuildingName.valueOf(delimited[1]))
-            "PLACE" -> MovePart1.PlaceBlockAt(vecFromString(delimited[1]), tileBlockFromString(delimited[2])!!)
+            "PASS" -> UserMove.Pass
+            "PICK_BUILDING" -> UserMove.PickBuilding(BuildingName.valueOf(delimited[1]))
+            "PLACE_BLOCK" -> UserMove.PlaceBlockAt(vecFromString(delimited[1]), tileBlockFromString(delimited[2])!!)
+
+            "PLACE_BUILDING" -> UserMove.PlaceBuilding(BuildingName.valueOf(delimited[1]), vecFromString(delimited[2]))
             else -> throw ParseException("Failed to parse: '%s'.".format(s), 0);
         }
     }

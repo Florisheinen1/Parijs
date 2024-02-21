@@ -1,19 +1,15 @@
 package game
 
 interface Player {
-    fun startPart1(cards: List<CardType>);
+    fun startPhase1(cards: List<CardType>);
+    fun startPhase2();
 
-    fun askTurnPart1(availableBuildings: List<BuildingName>, topTileBlock: TileBlock?): MovePart1;
+    fun askTurnPhase1(availableBuildings: List<BuildingName>, topTileBlock: TileBlock?): UserMove;
+    fun askTurnPhase2(): UserMove;
 
     fun respondToMove(response: MoveResponse);
 
-    fun updateMovePart1(move: MovePart1);
-
-    fun startPar2();
-
-    fun askTurnPart2(): MovePart2;
-
-    fun updateMovePart2(move: MovePart2);
+    fun updateMove(move: UserMove);
 
     fun declareWinner(isWinner: Boolean);
 }
@@ -23,17 +19,25 @@ sealed class MoveResponse {
     data class Deny(val reason: String) : MoveResponse();
 }
 
-sealed class MovePart1 {
-    data class PickBuilding(val buildingName: BuildingName): MovePart1();
-    data class PlaceBlockAt(val position: Vec2, val tileBlock: TileBlock): MovePart1();
+sealed class UserMove {
 
-    data object Pass: MovePart1();
+    data object Pass: UserMove();
+    // Phase 1
+    data class PickBuilding(val buildingName: BuildingName): UserMove();
+    data class PlaceBlockAt(val position: Vec2, val tileBlock: TileBlock): UserMove();
+    // Phase 2
+    data class PlaceBuilding(val buildingName: BuildingName, val position: Vec2) : UserMove();
+    sealed class CardAction : UserMove() {
+        data object claimSacreCoeur : CardAction();
+    }
 
-    fun clone(): MovePart1 {
+    fun clone(): UserMove {
         return when (this) {
             is Pass -> Pass;
             is PickBuilding -> PickBuilding(this.buildingName);
             is PlaceBlockAt -> PlaceBlockAt(this.position, this.tileBlock.copy());
+            is CardAction.claimSacreCoeur -> TODO()
+            is PlaceBuilding -> TODO()
         }
     }
 
@@ -43,13 +47,9 @@ sealed class MovePart1 {
         }
     }
 
-    fun getInverted(): MovePart1 {
+    fun getInverted(): UserMove {
         val cp = this.clone();
         cp.invert();
         return cp;
     }
-}
-
-sealed class MovePart2 {
-
 }

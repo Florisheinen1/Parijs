@@ -43,6 +43,7 @@ sealed class UserAction {
     data object CloseWindow : UserAction();
     data class PickBuilding(var buildingName: BuildingName) : UserAction();
     data class PlaceTileBlock(var position: Vec2, val tileBlock: TileBlock) : UserAction();
+    data class PlaceBuilding(var position: Vec2, val buildingName: BuildingName) : UserAction();
     data object Pass : UserAction();
 }
 

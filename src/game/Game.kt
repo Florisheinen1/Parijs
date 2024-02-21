@@ -14,14 +14,10 @@ class Game(val player1: Player, val player2: Player) {
     }
 
     private fun selectCardsForGame(): Vector<Card> {
-        val allCards = Vector<Card>();
-        for (cardType in Card::class.sealedSubclasses) {
-            allCards.add(cardType.objectInstance as? Card);
-        }
-
-        val targetCards = Vector<Card>();
-        targetCards.addAll(allCards.shuffled().take(8));
-        return targetCards;
+        val allCardTypes = CardType.entries;
+        val selectedCardTypes = allCardTypes.shuffled().take(8);
+        val selectedCards = selectedCardTypes.map { Card(it, CardState.UNPICKED_AND_UNUSED) }
+        return Vector(selectedCards);
     }
 
     private fun selectBlockListsForGame(player: PlayerColor): Vector<TileBlock?> {
@@ -48,8 +44,8 @@ class Game(val player1: Player, val player2: Player) {
     private fun doPart1(): PlayerColor {
         // State that the first part has started
         val selectedCardTypes = this.board.inGameCards.map { it.type };
-        this.player1.startPart1(selectedCardTypes);
-        this.player2.startPart1(selectedCardTypes);
+        this.player1.startPhase1(selectedCardTypes);
+        this.player2.startPhase1(selectedCardTypes);
 
         // Pick a player that starts
         var playerColorWithTurn = this.pickRandomPlayerColor();
@@ -62,7 +58,7 @@ class Game(val player1: Player, val player2: Player) {
             val validMove = this.getValidMovePart1(playerColorWithTurn);
 
             // If the player placed a block, remember this event
-            if (validMove is MovePart1.PlaceBlockAt) lastPlayerColorThatPlacedTileBlock = playerColorWithTurn;
+            if (validMove is UserMove.PlaceBlockAt) lastPlayerColorThatPlacedTileBlock = playerColorWithTurn;
 
             // Execute the move
             this.handleMovePart1(validMove, playerColorWithTurn);
@@ -70,7 +66,7 @@ class Game(val player1: Player, val player2: Player) {
             // Update the other player
             val otherColor = playerColorWithTurn.getInverted();
             val otherPlayer = getPlayerOfColor(otherColor);
-            otherPlayer.updateMovePart1(if (otherColor == PlayerColor.ORANGE) validMove.getInverted() else validMove);
+            otherPlayer.updateMove(if (otherColor == PlayerColor.ORANGE) validMove.getInverted() else validMove);
 
             // And flip the turns
             playerColorWithTurn = playerColorWithTurn.getInverted();
@@ -81,12 +77,12 @@ class Game(val player1: Player, val player2: Player) {
 
     private fun doPart2(playerColor: PlayerColor) {
         println("Part 2 starts with player: " + playerColor.name);
-        this.player1.startPar2();
-        this.player2.startPar2();
+        this.player1.startPhase2();
+        this.player2.startPhase2();
     }
 
     // Inverts colors when necessary. Returns non-inverted
-    private fun getValidMovePart1(playerColor: PlayerColor): MovePart1 {
+    private fun getValidMovePart1(playerColor: PlayerColor): UserMove {
         val playerWithTurn = this.getPlayerOfColor(playerColor);
 
         val openTileBlock: TileBlock? = when (playerColor) {
@@ -96,7 +92,7 @@ class Game(val player1: Player, val player2: Player) {
 
         while (true) {
             // Ask the player for a move
-            val move = playerWithTurn.askTurnPart1(
+            val move = playerWithTurn.askTurnPhase1(
                 this.board.unpickedBuildings,
                 if (playerColor == PlayerColor.ORANGE) openTileBlock?.getInverted() else openTileBlock
             );
@@ -113,20 +109,20 @@ class Game(val player1: Player, val player2: Player) {
         }
     }
 
-    private fun isMoveAllowed(move: MovePart1): MoveResponse {
+    private fun isMoveAllowed(move: UserMove): MoveResponse {
         return MoveResponse.Accept; // TODO: Implement this
     }
 
-    private fun handleMovePart1(move: MovePart1, playerColor: PlayerColor) {
+    private fun handleMovePart1(move: UserMove, playerColor: PlayerColor) {
         when (move) {
-            is MovePart1.Pass -> println("User passed");
-            is MovePart1.PickBuilding -> {
+            is UserMove.Pass -> println("User passed");
+            is UserMove.PickBuilding -> {
                 this.board.unpickedBuildings.removeElement(move.buildingName);
 
                 val inventory = if (playerColor == PlayerColor.BLUE) this.board.blueInventoryBuildings else this.board.orangeInventoryBuildings;
                 inventory.add(move.buildingName);
             }
-            is MovePart1.PlaceBlockAt -> {
+            is UserMove.PlaceBlockAt -> {
                 val targetList = when (playerColor) {
                     PlayerColor.BLUE -> this.board.unplacedBlueBlocks
                     PlayerColor.ORANGE -> this.board.unplacedOrangeBlocks
@@ -134,6 +130,9 @@ class Game(val player1: Player, val player2: Player) {
 
                 this.board.placeTileBlock(move.position, targetList[0]!!);
                 targetList.removeAt(0);
+            }
+            else -> {
+                throw Exception("Handling phase 2 move while in phase 1");
             }
         }
     }

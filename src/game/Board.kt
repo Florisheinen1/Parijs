@@ -98,7 +98,10 @@ enum class CardState {
     PICKED_AND_USED
 }
 
-data class Card(val type: CardType, var state: CardState = CardState.UNPICKED_AND_UNUSED);
+data class Card(
+        val type: CardType,
+        var state: CardState = CardState.UNPICKED_AND_UNUSED,
+        var owner: PlayerColor? = null);
 
 enum class PlayerColor {
     BLUE,

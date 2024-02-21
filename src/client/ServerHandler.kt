@@ -41,18 +41,21 @@ class ServerHandler(socket: Socket, private val player: Player) {
     }
 
     private fun handleIncomingPacket(packet: Packet) {
-
         when (packet) {
             Packet.WelcomeToLobby -> println("Entered lobby!");
-            is Packet.Part1Started -> this.player.startPart1(packet.selectedCards);
-            is Packet.AskForMovePart1 -> {
-                val move = this.player.askTurnPart1(packet.availableBuildings, packet.topTileBlock);
-                this.sendPacket(Packet.ReplyWithMovePart1(move));
+            is Packet.StartedPhase1 -> this.player.startPhase1(packet.selectedCards);
+            is Packet.StartedPhase2 -> this.player.startPhase2();
+            is Packet.AskForMovePhase1 -> {
+                val move = this.player.askTurnPhase1(packet.availableBuildings, packet.topTileBlock);
+                this.sendPacket(Packet.ReplyWithMove(move));
             }
-            is Packet.ReplyWithMovePart1 -> println("Received weird message from server: '%s'".format(packet.toString()));
-            is Packet.RespondToMovePart1 -> this.player.respondToMove(packet.moveResponse);
-            is Packet.UpdateWithMovePart1 -> this.player.updateMovePart1(packet.move);
-            is Packet.Part2Started -> this.player.startPar2();
+            is Packet.AskForMovePhase2 -> {
+                val move = this.player.askTurnPhase2();
+                this.sendPacket(Packet.ReplyWithMove(move));
+            }
+            is Packet.ReplyWithMove -> println("Received weird message from server: '%s'".format(packet.toString()));
+            is Packet.RespondToMove -> this.player.respondToMove(packet.moveResponse);
+            is Packet.UpdateWithMove -> this.player.updateMove(packet.move);
         }
     }
 }

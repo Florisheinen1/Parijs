@@ -26,6 +26,9 @@ class Client(private val ui: UI) : Player {
                     is UserAction.PlaceTileBlock -> {
 //                        println("Received user place tile event at (%d, %d)".format(action.position.x, action.position.y));
                     }
+                    is UserAction.PlaceBuilding -> {
+                        println("Received place building event of %s on (%d, %d)".format(action.buildingName, action.position.x, action.position.y));
+                    }
                 }
             }
         });
@@ -65,7 +68,7 @@ class Client(private val ui: UI) : Player {
         return serverHandler;
     }
 
-    override fun startPart1(cards: List<CardType>) {
+    override fun startPhase1(cards: List<CardType>) {
         synchronized(this.board) {
             // Reset the board
             this.board = Board();
@@ -83,7 +86,11 @@ class Client(private val ui: UI) : Player {
         this.ui.updatePhase(GuiPhase.GamePart1(false));
     }
 
-    override fun askTurnPart1(availableBuildings: List<BuildingName>, topTileBlock: TileBlock?): MovePart1 {
+    override fun startPhase2() {
+        println(" ===== Phase 2 started! =====");
+    }
+
+    override fun askTurnPhase1(availableBuildings: List<BuildingName>, topTileBlock: TileBlock?): UserMove {
         println("\nWe received the turn. TopBlock: %s".format(topTileBlock?.toString()));
         // Update our board
         synchronized(this.board) {
@@ -101,13 +108,13 @@ class Client(private val ui: UI) : Player {
         }
 
         // Create action listener that stores user action here
-        var move: MovePart1? = null;
+        var move: UserMove? = null;
         val listener = object : UserActionListener() {
             override fun onUserAction(action: UserAction) {
                 when (action) {
-                    is UserAction.PickBuilding -> move = MovePart1.PickBuilding(action.buildingName);
-                    is UserAction.PlaceTileBlock -> move = MovePart1.PlaceBlockAt(action.position, action.tileBlock);
-                    is UserAction.Pass -> move = MovePart1.Pass;
+                    is UserAction.PickBuilding -> move = UserMove.PickBuilding(action.buildingName);
+                    is UserAction.PlaceTileBlock -> move = UserMove.PlaceBlockAt(action.position, action.tileBlock);
+                    is UserAction.Pass -> move = UserMove.Pass;
                     else -> {
                         println("Ignoring action that is not applicable: %s".format(action.toString()));
                     }
@@ -127,11 +134,11 @@ class Client(private val ui: UI) : Player {
         // Remove the action listener again
         this.ui.removeUserActionListener(listener);
 
-        val validatedMove: MovePart1 = move!!;
+        val validatedMove: UserMove = move!!;
         // Update our own board representation
         when (validatedMove) {
-            is MovePart1.Pass -> {}
-            is MovePart1.PickBuilding -> {
+            is UserMove.Pass -> {}
+            is UserMove.PickBuilding -> {
                 synchronized(this.board) {
                     this.board.unpickedBuildings.removeElement(validatedMove.buildingName);
                     this.board.blueInventoryBuildings.add(validatedMove.buildingName);
@@ -139,7 +146,7 @@ class Client(private val ui: UI) : Player {
                 }
                 println(" -> Decided on: Pick building: " + validatedMove.buildingName.name);
             }
-            is MovePart1.PlaceBlockAt -> {
+            is UserMove.PlaceBlockAt -> {
                 synchronized(this.board) {
                     this.board.placeTileBlock(validatedMove.position, validatedMove.tileBlock);
                     this.board.unplacedBlueBlocks.removeAt(0);
@@ -148,8 +155,46 @@ class Client(private val ui: UI) : Player {
                 }
                 println(" -> Decided on: Place block: " + validatedMove.tileBlock.topLeft.name + "," + validatedMove.tileBlock.topRight.name + "," + validatedMove.tileBlock.bottomLeft.name + "," + validatedMove.tileBlock.bottomRight.name);
             }
+            else -> {
+                throw Exception("Received phase 2 move while in phase 1");
+            }
         }
 
+        return validatedMove;
+    }
+
+    override fun askTurnPhase2(): UserMove {
+        println("\nWe received the turn for phase 2.");
+
+        var move: UserMove? = null;
+        val listener = object : UserActionListener() {
+            override fun onUserAction(action: UserAction) {
+                when (action) {
+                    is UserAction.PlaceBuilding -> move = UserMove.PlaceBuilding(action.buildingName, action.position);
+                    is UserAction.Pass -> move = UserMove.Pass;
+                    else -> {
+                        println("Received unexpected move!");
+                    }
+                }
+            }
+        }
+        this.ui.addUserActionListener(listener);
+
+        // TODO: Indicate the user is allowed to make a move
+
+        while (move == null) Thread.sleep(100);
+
+        this.ui.removeUserActionListener(listener);
+        val validatedMove = move!!;
+        when (validatedMove) {
+            is UserMove.PlaceBuilding -> {
+                synchronized(this.board) {
+
+                }
+            }
+            is UserMove.Pass -> TODO()
+            else -> println("Received phase 1 move while in phase 2");
+        }
         return validatedMove;
     }
 
@@ -157,10 +202,10 @@ class Client(private val ui: UI) : Player {
         println("    %s".format(response.toString()))
     }
 
-    override fun updateMovePart1(move: MovePart1) {
+    override fun updateMove(move: UserMove) {
         when (move) {
-            MovePart1.Pass -> println("Other opponent skipped its turn");
-            is MovePart1.PickBuilding -> {
+            UserMove.Pass -> println("Other opponent skipped its turn");
+            is UserMove.PickBuilding -> {
                 println("Opponent picked building: %s".format(move.buildingName));
                 synchronized(this.board) {
                     this.board.unpickedBuildings.removeElement(move.buildingName);
@@ -169,26 +214,16 @@ class Client(private val ui: UI) : Player {
                     this.ui.updateGameState(this.board);
                 }
             }
-            is MovePart1.PlaceBlockAt -> {
+            is UserMove.PlaceBlockAt -> {
                 println("Opponent placed tile block at (%d, %d): %s,%s,%s,%s".format(move.position.x, move.position.y, move.tileBlock.topLeft.name, move.tileBlock.topRight.name, move.tileBlock.bottomLeft.name, move.tileBlock.bottomRight.name));
                 synchronized(this.board) {
                     this.board.placeTileBlock(move.position, move.tileBlock);
                     this.board.unplacedOrangeBlocks.removeAt(0);
                 }
+            } else -> {
+                println("Updating phase 2 move while in phase 1");
             }
         }
-    }
-
-    override fun startPar2() {
-        println("Started part 2!!!");
-    }
-
-    override fun askTurnPart2(): MovePart2 {
-        TODO("Not yet implemented")
-    }
-
-    override fun updateMovePart2(move: MovePart2) {
-        TODO("Not yet implemented")
     }
 
     override fun declareWinner(isWinner: Boolean) {

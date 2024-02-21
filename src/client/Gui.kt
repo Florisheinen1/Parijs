@@ -13,6 +13,7 @@ import javax.swing.border.EmptyBorder
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import javax.swing.text.BadLocationException
+import javax.swing.text.Position
 import kotlin.math.abs
 
 val INITIAL_GUI_PHASE = GuiPhase.Connecting;
@@ -24,9 +25,15 @@ interface Selectable {
 
 sealed class UserClick {
     data object CloseButton: UserClick();
+
+    // Phase 1
     data class UnpickedBuilding(val name: BuildingName) : UserClick();
     data class SelectUnplacedTileBlock(val tileBlock: TileBlock, val selectable: Selectable) : UserClick();
     data class OnBoard(val tileX: Int, val tileY: Int) : UserClick();
+
+    // Phase 2
+    data class PickedBuilding(val buildingName: BuildingName, val selectable: Selectable) : UserClick();
+    data class OnCard(val cardType: CardType, val cardState: CardState, val cardOwner: PlayerColor?) : UserClick();
 }
 
 interface UserClickListener {
@@ -71,15 +78,71 @@ class Gui : UI() {
                 when (previousClick) {
                     is UserClick.SelectUnplacedTileBlock -> {
                         val pos = Vec2(
-                                if (click.tileX % 2 == 0) click.tileX else click.tileX - 1,
-                                if (click.tileY % 2 == 0) click.tileY else click.tileY - 1
+                            if (click.tileX % 2 == 0) click.tileX else click.tileX - 1,
+                            if (click.tileY % 2 == 0) click.tileY else click.tileY - 1
                         )
                         val tile = previousClick.tileBlock;
                         onUserAction(UserAction.PlaceTileBlock(pos, tile));
                         previousClick.selectable.deselect();
                         selectedClick = null;
                     }
+                    is UserClick.PickedBuilding -> {
+                        val tilePos = Vec2(click.tileX, click.tileY);
+                        onUserAction(UserAction.PlaceBuilding(tilePos, previousClick.buildingName));
+                        previousClick.selectable.deselect();
+                    }
                     else -> {}
+                }
+            }
+            is UserClick.PickedBuilding -> {
+                // TODO: Unless this is clicked after the right card has been clicked
+                selectedClick?.second?.deselect();
+                selectedClick = Pair(click, click.selectable);
+                click.selectable.select();
+            }
+            /*
+                NO_ACTION_TYPE -> Sacre Coeur, just dibs. No select
+                SINGLE_ACTION_TYPE -> Jardin des plantes, select and place
+                DUAL_ACTION_TYPE -> Metropolitan, dibs and place building later. No select!
+                TRIPLE_ACTION_TYPE -> Select, select, select, place
+             */
+            is UserClick.OnCard -> {
+                when (click.cardType) {
+                    // No action types: Just dibs
+                    CardType.SACRE_COEUR -> {
+                        when (click.cardOwner) {
+                            PlayerColor.ORANGE -> {
+                                println("Clicked on card of opponent. Cant do this!");
+                                return;
+                            }
+                            PlayerColor.BLUE -> {
+                                println("Already owned this card. Cant do this!");
+                                return;
+                            }
+                            null -> {
+                                println("Clicked unselected card.");
+
+                            }
+                        }
+                    }
+
+                    // Single action: Select and place.
+                    CardType.LA_GRANDE_LUMIERE -> TODO()
+                    CardType.LE_PENSEUR -> TODO()
+                    CardType.FONTAINE_DES_MERS -> TODO()
+                    CardType.MOULIN_ROUGE -> TODO()
+                    CardType.JARDIN_DES_PLANTES -> TODO()
+                    CardType.LE_PEINTRE -> TODO()
+                    CardType.BOUQUINISTES_SUR_LA_SEINE -> TODO()
+                    CardType.LAMPADAIRE -> TODO()
+
+                    // Dual action: Dibs, and use later
+                    CardType.METROPOLITAN -> TODO() // Allow building over lantern
+                    CardType.CHARTIER -> TODO() // Allow build on opponent color
+
+                    // Triple action: Select card, select own building, select unpicked building, click board
+                    CardType.LEVITATION -> TODO()
+
                 }
             }
         }
@@ -173,21 +236,117 @@ class BottomPanel(private val userClickListener: UserClickListener) : JPanel() {
     });
 
     private val rightPanel = BottomRightPanel(userClickListener);
-
-//    private val leftPanel = BottomRightPanel(userClickListener);
+    private val cardsPanel = CardsCollection(userClickListener);
 
     init {
         this.layout = BorderLayout();
         unpickedBuildings.updateBuildings(BuildingName.entries);
         this.add(unpickedBuildings, BorderLayout.CENTER);
         this.add(rightPanel, BorderLayout.EAST);
-//        this.add(leftPanel, BorderLayout.WEST);
+        this.add(cardsPanel, BorderLayout.WEST);
     }
 
     fun updateBoard(newBoard: Board) {
         this.unpickedBuildings.updateBuildings(newBoard.unpickedBuildings);
         this.rightPanel.updateBoard(newBoard);
-//        this.leftPanel.updateBoard(newBoard);
+        this.cardsPanel.updateCards(newBoard.inGameCards);
+    }
+}
+
+class ScreenCard(val userClickListener: UserClickListener) : JComponent() {
+    private var cardType: CardType? = null;
+    private var cardState = CardState.UNPICKED_AND_UNUSED;
+    private var cardOwner: PlayerColor? = null;
+
+    private val ownerMarkerSize = 30;
+
+    init {
+        this.border = BorderFactory.createLineBorder(Color.WHITE, 5);
+
+        this.addMouseListener(object : MouseAdapter() {
+            override fun mouseEntered(e: MouseEvent?) {
+                if (e == null) return;
+                border = BorderFactory.createLineBorder(Color.BLACK, 5);
+            }
+
+            override fun mouseExited(e: MouseEvent?) {
+                if (e == null) return;
+                border = BorderFactory.createLineBorder(Color.WHITE, 5);
+            }
+
+            override fun mouseClicked(e: MouseEvent?) {
+                if (e == null) return;
+                if (cardType == null) return;
+                userClickListener.onUserClick(UserClick.OnCard(cardType!!, cardState, cardOwner))
+            }
+        })
+    }
+
+    override fun paintComponent(g: Graphics?) {
+        super.paintComponent(g);
+        if (g == null) return;
+
+        if (this.cardType == null) {
+            g.color = Color.BLACK;
+            g.fillRect(0, 0, width, height);
+        } else this.drawCard(g, this.cardType!!, this.cardOwner);
+    }
+
+    private fun drawCard(g: Graphics, cardType: CardType, cardOwner: PlayerColor?) {
+        g.color = when (this.cardState) {
+            CardState.UNPICKED_AND_UNUSED -> Color.GREEN
+            CardState.PICKED_BUT_UNUSED -> Color.YELLOW
+            CardState.PICKED_AND_USED -> Color.RED
+        }
+        g.fillRect(0, 0, width, height);
+
+        if (cardOwner != null) {
+            g.color = Color.BLACK;
+            val origin = Vec2(width - this.ownerMarkerSize, 0);
+            g.fillRect(origin.x, origin.y, ownerMarkerSize, ownerMarkerSize);
+
+            g.color = when (cardOwner) {
+                PlayerColor.BLUE -> Color.BLUE
+                PlayerColor.ORANGE -> Color.ORANGE;
+            }
+            g.fillRect(origin.x + 2, origin.y + 2, ownerMarkerSize - 4, ownerMarkerSize - 4);
+        }
+
+        g.color = Color.BLACK;
+        g.drawString(cardType.name, 20, 40);
+    }
+
+    fun updateCard(card: Card) {
+        this.cardType = card.type;
+        this.cardState = card.state;
+        this.cardOwner = card.owner;
+        repaint();
+    }
+}
+
+class CardsCollection(userClickListener: UserClickListener) : JPanel() {
+    private val screenCards = Vector<ScreenCard>();
+    private val CARD_COLS = 2;
+    private val CARD_ROWS = 4;
+    private val SIZE = 400;
+
+    init {
+        this.layout = GridLayout(CARD_ROWS, CARD_COLS);
+        this.preferredSize = Dimension(SIZE, SIZE);
+
+        for (i in 0..<8) {
+            val card = ScreenCard(userClickListener);
+            this.screenCards.add(card);
+            this.add(card);
+        }
+    }
+
+    fun updateCards(cards: List<Card>) {
+        for (i in 0..<8) {
+            val screenCard = this.screenCards[i];
+            val card = cards[i];
+            screenCard.updateCard(card);
+        }
     }
 }
 

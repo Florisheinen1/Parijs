@@ -57,16 +57,21 @@ class ClientHandler(socket: Socket) : Player {
         }
     }
 
-    override fun startPart1(cards: List<CardType>) {
-        sendPacket(Packet.Part1Started(cards));
+    // ==== Player specific functions ==== //
+
+    override fun startPhase1(cards: List<CardType>) {
+        sendPacket(Packet.StartedPhase1(cards));
+    }
+    override fun startPhase2() {
+        this.sendPacket(Packet.StartedPhase2);
     }
 
-    override fun askTurnPart1(availableBuildings: List<BuildingName>, topTileBlock: TileBlock?): MovePart1 {
-        var receivedMove: MovePart1? = null;
+    override fun askTurnPhase1(availableBuildings: List<BuildingName>, topTileBlock: TileBlock?): UserMove {
+        var receivedMove: UserMove? = null;
 
         val listener = object : PacketListener() {
             override fun onIncomingMessage(packet: Packet) {
-                if (packet is Packet.ReplyWithMovePart1) {
+                if (packet is Packet.ReplyWithMove) {
                     receivedMove = packet.move;
                 }
             }
@@ -75,7 +80,7 @@ class ClientHandler(socket: Socket) : Player {
         // Add the packet listener so we start listening
         this.addPacketListener(listener)
         // Send the request for a move
-        sendPacket(Packet.AskForMovePart1(availableBuildings, topTileBlock))
+        sendPacket(Packet.AskForMovePhase1(availableBuildings, topTileBlock))
         // Wait for the incoming move
         while (receivedMove == null) Thread.sleep(100);
         // And stop listening for these messages again
@@ -84,24 +89,17 @@ class ClientHandler(socket: Socket) : Player {
         return receivedMove!!;
     }
 
+    override fun askTurnPhase2(): UserMove {
+        println("Got asked for turn in phase 2"); // TODO: Implement this
+        TODO();
+    }
+
     override fun respondToMove(response: MoveResponse) {
-        sendPacket(Packet.RespondToMovePart1(response));
+        sendPacket(Packet.RespondToMove(response));
     }
 
-    override fun updateMovePart1(move: MovePart1) {
-        sendPacket(Packet.UpdateWithMovePart1(move));
-    }
-
-    override fun startPar2() {
-        TODO("Not yet implemented")
-    }
-
-    override fun askTurnPart2(): MovePart2 {
-        TODO("Not yet implemented")
-    }
-
-    override fun updateMovePart2(move: MovePart2) {
-        TODO("Not yet implemented")
+    override fun updateMove(move: UserMove) {
+        this.sendPacket(Packet.UpdateWithMove(move));
     }
 
     override fun declareWinner(isWinner: Boolean) {
