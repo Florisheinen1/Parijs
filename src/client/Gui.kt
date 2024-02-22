@@ -289,6 +289,9 @@ class BuildStage(private val eventManager: GuiEventManager) : JPanel() {
                         }
                         is GuiEvent.BuildStage.Updated -> {}
                     }
+                    is GuiEvent.UpdateBoard -> {
+                        stageObject(StagedObject.None);
+                    }
                     else -> {}
                 }
             }
@@ -471,24 +474,19 @@ class BottomRightPanel(private val eventManager: GuiEventManager) : JPanel() {
 
     private val passButton = JButton("Skip turn");
 
-    private var tileBlockIsHovered = false;
-    private var tileBlockIsSelected = false;
-
     init {
-        this.unplacedTileBlock.addTileBlockClickListener(object : TileBlockMouseListener {
+        this.unplacedTileBlock.addTileBlockMouseListener(object : TileBlockMouseListener {
             override fun onSelectedTile(tileBlock: TileBlock, relTileX: Int, relTileY: Int) {
                 eventManager.emitEvent(GuiEvent.ClickOn.UnplacedTileBlock(tileBlock));
             }
             override fun onAbsoluteMouseEnter(e: MouseEvent) {
-                tileBlockIsHovered = true;
-                updateTileBlockBorder();
+                unplacedTileBlock.border = BorderFactory.createLineBorder(Color.BLACK, 5);
             }
             override fun onAbsoluteMouseExit(e: MouseEvent) {
-                tileBlockIsHovered = false;
-                updateTileBlockBorder();
+                unplacedTileBlock.border = BorderFactory.createLineBorder(Color.WHITE, 5);
             }
         })
-        this.updateTileBlockBorder();
+        unplacedTileBlock.border = BorderFactory.createLineBorder(Color.WHITE, 5);
 
         this.preferredSize = Dimension(WIDTH, WIDTH);
 
@@ -507,23 +505,20 @@ class BottomRightPanel(private val eventManager: GuiEventManager) : JPanel() {
                 }
             }
         })
-
-    }
-
-    private fun updateTileBlockBorder() {
-        var borderColor = if (this.tileBlockIsHovered) Color.BLACK else Color.WHITE;
-        if (this.tileBlockIsSelected) borderColor = Color.RED;
-        unplacedTileBlock.border = BorderFactory.createLineBorder(borderColor, 5);
     }
 
     fun updateTileBlock(newBoard: Board) {
+        val emptyTileBlock = TileBlock(Direction.NORTH, Tile.BRICKS, Tile.BRICKS, Tile.BRICKS, Tile.BRICKS);
         if (newBoard.unplacedBlueBlocks.isEmpty()) {
-            this.unplacedTileBlock.updateTiles(TileBlock(Direction.NORTH, Tile.BRICKS, Tile.BRICKS, Tile.BRICKS, Tile.BRICKS));
+            this.unplacedTileBlock.updateTiles(emptyTileBlock);
+            println("Setting unplaced tileblock to empty because no more tile blocks left");
         } else {
             val topBlock = newBoard.unplacedBlueBlocks[0];
             if (topBlock == null) {
-                this.unplacedTileBlock.updateTiles(TileBlock(Direction.NORTH, Tile.BRICKS, Tile.BRICKS, Tile.BRICKS, Tile.BRICKS));
+                println("Setting unplaced tileBlock to empty because top block is unknown");
+                this.unplacedTileBlock.updateTiles(emptyTileBlock);
             } else {
+                println("Setting unplaced tileBlock because top block is known!");
                 this.unplacedTileBlock.updateTiles(topBlock);
             }
         }
@@ -670,16 +665,16 @@ open class ScreenTileBlock : JPanel() {
         this.bottomRightTile.addMouseListener(childMouseListener);
 
         this.topLeftTile.addMouseListener(object : MouseAdapter() {
-            override fun mouseClicked(e: MouseEvent?) { fireTileBlockClickEvent(TileBlock(Direction.NORTH, topLeftTile.tileType, topRightTile.tileType, bottomLeftTile.tileType, bottomRightTile.tileType), 0, 0); }
+            override fun mouseClicked(e: MouseEvent?) { fireTileBlockMouseEvent(TileBlock(Direction.NORTH, topLeftTile.tileType, topRightTile.tileType, bottomLeftTile.tileType, bottomRightTile.tileType), 0, 0); }
         })
         this.topRightTile.addMouseListener(object : MouseAdapter() {
-            override fun mouseClicked(e: MouseEvent?) { fireTileBlockClickEvent(TileBlock(Direction.NORTH, topLeftTile.tileType, topRightTile.tileType, bottomLeftTile.tileType, bottomRightTile.tileType), 1, 0); }
+            override fun mouseClicked(e: MouseEvent?) { fireTileBlockMouseEvent(TileBlock(Direction.NORTH, topLeftTile.tileType, topRightTile.tileType, bottomLeftTile.tileType, bottomRightTile.tileType), 1, 0); }
         })
         this.bottomLeftTile.addMouseListener(object : MouseAdapter() {
-            override fun mouseClicked(e: MouseEvent?) { fireTileBlockClickEvent(TileBlock(Direction.NORTH, topLeftTile.tileType, topRightTile.tileType, bottomLeftTile.tileType, bottomRightTile.tileType), 0, 1); }
+            override fun mouseClicked(e: MouseEvent?) { fireTileBlockMouseEvent(TileBlock(Direction.NORTH, topLeftTile.tileType, topRightTile.tileType, bottomLeftTile.tileType, bottomRightTile.tileType), 0, 1); }
         })
         this.bottomRightTile.addMouseListener(object : MouseAdapter() {
-            override fun mouseClicked(e: MouseEvent?) { fireTileBlockClickEvent(TileBlock(Direction.NORTH, topLeftTile.tileType, topRightTile.tileType, bottomLeftTile.tileType, bottomRightTile.tileType), 1, 1); }
+            override fun mouseClicked(e: MouseEvent?) { fireTileBlockMouseEvent(TileBlock(Direction.NORTH, topLeftTile.tileType, topRightTile.tileType, bottomLeftTile.tileType, bottomRightTile.tileType), 1, 1); }
         })
 
         this.addMouseListener(object : MouseAdapter() {
@@ -707,16 +702,12 @@ open class ScreenTileBlock : JPanel() {
         this.add(bottomRightTile);
     }
 
-    fun addTileBlockClickListener(listener: TileBlockMouseListener) {
-        synchronized(this.tileBlockMouseListeners) {
-            this.tileBlockMouseListeners.add(listener);
-        }
+    fun addTileBlockMouseListener(listener: TileBlockMouseListener) {
+        this.tileBlockMouseListeners.add(listener);
     }
-    private fun fireTileBlockClickEvent(tileBlock: TileBlock, relTileX: Int, relTileY: Int) {
-        synchronized(this.tileBlockMouseListeners) {
-            for (listener in this.tileBlockMouseListeners) {
-                listener.onSelectedTile(tileBlock, relTileX, relTileY);
-            }
+    private fun fireTileBlockMouseEvent(tileBlock: TileBlock, relTileX: Int, relTileY: Int) {
+        for (listener in this.tileBlockMouseListeners) {
+            listener.onSelectedTile(tileBlock, relTileX, relTileY);
         }
     }
 
@@ -790,74 +781,85 @@ open class ScreenTileBlock : JPanel() {
 ////                            isReplaced = false;
 //                        }
 
-class ScreenBoardTileLayer(val eventManager: GuiEventManager) : JPanel() {
+class ScreenBoardTileLayer(eventManager: GuiEventManager) : JPanel() {
     private val BLOCK_COLS = 4;
     private val BLOCK_ROWS = 4;
-
-    private val tileBlocks = Vector<ScreenTileBlock>();
 
     init {
         this.layout = GridLayout(BLOCK_ROWS, BLOCK_COLS, 0, 0);
         for (row in 0..<BLOCK_ROWS) {
             for (column in 0..<BLOCK_COLS) {
-                val tileBlock = ScreenTileBlock();
-
-                val hoverManager = object : TileBlockMouseListener, GuiEventListener {
-                    var stagedObject: StagedObject = StagedObject.None;
-
-                    var originalTileBlock = tileBlock.getDisplayedTileBlock();
-                    var isReplaced = false;
-
-                    override fun onEvent(event: GuiEvent) {
-                        if (event is GuiEvent.BuildStage.Updated) stagedObject = event.stagedObject;
-                        if (stagedObject is StagedObject.StagedTileBlock) {
-                            if (originalTileBlock.isBricks()) {
-                                cursor = Cursor(Cursor.HAND_CURSOR);
-                            } else {
-                                cursor = Cursor.getSystemCustomCursor("Invalid.32x32");
-                            }
-                        }
-                    }
-                    override fun onSelectedTile(tileBlock: TileBlock, relTileX: Int, relTileY: Int) {
-                        synchronized(tileBlock) {
-                            eventManager.emitEvent(GuiEvent.ClickOn.Board(column*2 + relTileX, row*2 + relTileY))
-                        }
-                    }
-                    override fun onAbsoluteMouseEnter(e: MouseEvent) {
-                        when (stagedObject) {
-                            is StagedObject.None -> {}
-                            is StagedObject.StagedBuilding -> TODO()
-                            is StagedObject.StagedTileBlock -> {
-                                val temporaryTiles = (stagedObject as StagedObject.StagedTileBlock).tileBlock.copy();
-                                tileBlock.updateTiles(temporaryTiles);
-                                isReplaced = true;
-                            }
-                        }
-                    }
-
-                    override fun onAbsoluteMouseExit(e: MouseEvent) {
-                        if (isReplaced) {
-                            tileBlock.updateTiles(originalTileBlock);
-                            isReplaced = false;
-                        }
-                    }
-                }
-
-                tileBlock.addTileBlockClickListener(hoverManager);
-                eventManager.addEventListener(hoverManager);
-
+                val tileBlock = this.createScreenTileBlock(column, row, eventManager);
                 this.add(tileBlock);
-                this.tileBlocks.add(tileBlock);
             }
         }
+    }
 
-        eventManager.addEventListener(object : GuiEventListener {
+    private fun createScreenTileBlock(blockColumn: Int, blockRow: Int, eventManager: GuiEventManager): ScreenTileBlock {
+        val tileBlock = ScreenTileBlock();
+
+        val blockEventListener = object : TileBlockMouseListener, GuiEventListener {
+            // Keep track of staged object
+            var stagedObject: StagedObject = StagedObject.None;
+
+            // And keep track of the original - according to the board - tiles of this block
+            var originalTileBlock = tileBlock.getDisplayedTileBlock();
+            // Can be temporarily replaced because we might display the suggested new TileBlock here.
+            var isReplaced = false;
+
             override fun onEvent(event: GuiEvent) {
-                if (event is GuiEvent.UpdateBoard) {
-                    updateTileLayer(event.newBoard);
+                when (event) {
+                    is GuiEvent.BuildStage.Updated -> {
+                        stagedObject = event.stagedObject;
+                        if (stagedObject is StagedObject.StagedTileBlock) {
+                            cursor = if (originalTileBlock.isBricks()) {
+                                Cursor(Cursor.HAND_CURSOR);
+                            } else {
+                                Cursor.getSystemCustomCursor("Invalid.32x32");
+                            }
+                        }
+                    }
+                    is GuiEvent.UpdateBoard -> {
+                        val tileOrigin = Vec2(blockColumn * 2, blockRow * 2);
+                        val newTileBlock = TileBlock(
+                                Direction.NORTH,
+                                event.newBoard.getTile(tileOrigin.x, tileOrigin.y),
+                                event.newBoard.getTile(tileOrigin.x+1, tileOrigin.y),
+                                event.newBoard.getTile(tileOrigin.x, tileOrigin.y+1),
+                                event.newBoard.getTile(tileOrigin.x+1, tileOrigin.y+1),
+                        );
+                        originalTileBlock = newTileBlock;
+                        tileBlock.updateTiles(newTileBlock);
+                        println("Updating from event: %d, %d to %s".format(blockColumn, blockRow, newTileBlock))
+                    }
+                    else -> {}
                 }
             }
-        })
+            override fun onSelectedTile(tileBlock: TileBlock, relTileX: Int, relTileY: Int) {
+                eventManager.emitEvent(GuiEvent.ClickOn.Board(blockColumn*2 + relTileX, blockRow*2 + relTileY))
+            }
+            override fun onAbsoluteMouseEnter(e: MouseEvent) {
+                when (stagedObject) {
+                    is StagedObject.None -> {}
+                    is StagedObject.StagedBuilding -> TODO()
+                    is StagedObject.StagedTileBlock -> {
+                        val temporaryTiles = (stagedObject as StagedObject.StagedTileBlock).tileBlock.copy();
+                        tileBlock.updateTiles(temporaryTiles);
+                        isReplaced = true;
+                    }
+                }
+            }
+
+            override fun onAbsoluteMouseExit(e: MouseEvent) {
+                if (isReplaced) {
+                    tileBlock.updateTiles(originalTileBlock);
+                    isReplaced = false;
+                }
+            }
+        }
+        tileBlock.addTileBlockMouseListener(blockEventListener);
+        eventManager.addEventListener(blockEventListener);
+        return tileBlock;
     }
 
     override fun paintComponent(g: Graphics?) {
@@ -865,23 +867,6 @@ class ScreenBoardTileLayer(val eventManager: GuiEventManager) : JPanel() {
         if (g == null) return;
         g.color = Color.RED;
         g.fillRect(0, 0, width, height);
-    }
-
-    fun updateTileLayer(newBoard: Board) {
-        for (row in 0..<BLOCK_ROWS) {
-            for (column in 0..<BLOCK_COLS) {
-                val origin = Vec2(column * 2, row * 2);
-                val newTileBlock = TileBlock(
-                    Direction.NORTH,
-                    newBoard.getTile(origin.x, origin.y),
-                    newBoard.getTile(origin.x + 1, origin.y),
-                    newBoard.getTile(origin.x, origin.y + 1),
-                    newBoard.getTile(origin.x + 1, origin.y + 1),
-                )
-
-                this.tileBlocks[row * BLOCK_COLS + column].updateTiles(newTileBlock);
-            }
-        }
     }
 }
 

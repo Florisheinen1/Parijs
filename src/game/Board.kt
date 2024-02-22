@@ -28,7 +28,7 @@ open class Board {
             // TODO: Deny user move if this went wrong
             throw InvalidParameterException("Invalid args for PlaceBlock");
         }
-
+        println("Setting %d, %d to: %s".format(tilePos.x, tilePos.y, tileBlock.toString()));
         this.setTile(tileBlock.topLeft, tilePos.x, tilePos.y);
         this.setTile(tileBlock.topRight, tilePos.x+1, tilePos.y);
         this.setTile(tileBlock.bottomLeft, tilePos.x, tilePos.y+1);

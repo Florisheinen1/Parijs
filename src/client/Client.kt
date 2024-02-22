@@ -219,6 +219,7 @@ class Client(private val ui: UI) : Player {
                 synchronized(this.board) {
                     this.board.placeTileBlock(move.position, move.tileBlock);
                     this.board.unplacedOrangeBlocks.removeAt(0);
+                    this.ui.updateGameState(this.board);
                 }
             } else -> {
                 println("Updating phase 2 move while in phase 1");
