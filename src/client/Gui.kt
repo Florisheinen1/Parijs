@@ -7,9 +7,7 @@ import java.net.InetAddress
 import java.net.UnknownHostException
 import java.util.*
 import javax.swing.*
-import javax.swing.border.Border
 import javax.swing.border.EmptyBorder
-import javax.swing.border.LineBorder
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import javax.swing.text.BadLocationException
@@ -17,158 +15,198 @@ import kotlin.math.abs
 
 val INITIAL_GUI_PHASE = GuiPhase.Connecting;
 
-interface Selectable {
-    fun select();
-    fun deselect();
+sealed class GuiEvent {
+    sealed class ClickOn : GuiEvent() {
+        data object CloseButton: ClickOn();
+        data object PassButton : ClickOn();
+
+        // Build stage
+        data object RotateStage : ClickOn();
+        data object ClearStage : ClickOn();
+
+        // Phase 1
+        data class UnpickedBuilding(val name: BuildingName) : ClickOn();
+        data class UnplacedTileBlock(val tileBlock: TileBlock) : ClickOn();
+        data class Board(val tileX: Int, val tileY: Int) : ClickOn();
+
+        // Phase 2
+        data class InventoryBuilding(val buildingName: BuildingName) : ClickOn();
+        data class ActionCard(val cardType: CardType, val cardState: CardState, val cardOwner: PlayerColor?) : ClickOn();
+    }
+
+    sealed class BuildStage : GuiEvent() {
+        sealed class Stage : BuildStage() {
+            data class UnplacedTileBlock(val tileBlock: TileBlock) : Stage();
+            data class Building(val buildingName: BuildingName) : Stage();
+        }
+
+        data object Clear : BuildStage();
+        data object Rotate : BuildStage();
+
+        data class Updated(val stagedObject: StagedObject) : BuildStage();
+    }
 }
 
-sealed class UserClick {
-    data object CloseButton: UserClick();
-
-    // Phase 1
-    data class UnpickedBuilding(val name: BuildingName) : UserClick();
-    data class SelectUnplacedTileBlock(val tileBlock: TileBlock, val selectable: Selectable) : UserClick();
-    data class OnBoard(val tileX: Int, val tileY: Int) : UserClick();
-
-    // Phase 2
-    data class PickedBuilding(val buildingName: BuildingName, val selectable: Selectable) : UserClick();
-    data class OnCard(val cardType: CardType, val cardState: CardState, val cardOwner: PlayerColor?) : UserClick();
+interface GuiEventManager {
+    fun emitEvent(event: GuiEvent);
+    fun addEventListener(listener: GuiEventListener);
 }
 
-interface UserClickEmitter {
-    fun emitUserClick(click: UserClick);
-    fun addUserClickListener(listener: UserClickListener);
-}
-interface UserClickListener {
-    fun onUserClick(click: UserClick);
+interface GuiEventListener {
+    fun onEvent(event: GuiEvent);
 }
 
 class Gui : UI() {
-    private val userClickEmitter = object : UserClickEmitter {
-        private val listeners = Vector<UserClickListener>();
-
-        override fun emitUserClick(click: UserClick) {
+    private val eventManager = object : GuiEventManager {
+        private val listeners = Vector<GuiEventListener>();
+        override fun emitEvent(event: GuiEvent) {
             for (listener in this.listeners) {
-                listener.onUserClick(click);
+                listener.onEvent(event);
             }
         }
-        override fun addUserClickListener(listener: UserClickListener) {
+        override fun addEventListener(listener: GuiEventListener) {
             this.listeners.add(listener);
         }
     }
 
-    private val window = GameWindow(userClickEmitter);
+    private val window = GameWindow(eventManager);
     private var guiPhase: GuiPhase = INITIAL_GUI_PHASE;
-
-    private var selectedClick: Pair<UserClick, Selectable>? = null;
+    private var selectClick: GuiEvent? = null;
 
     init {
-        this.window.addKeyListener(object : KeyAdapter() {
-            override fun keyPressed(e: KeyEvent?) {
-                super.keyPressed(e);
-                if (e == null) return;
-                if (e.keyCode == KeyEvent.VK_SPACE) {
-                    println("Pressed rotate button");
-                }
-            }
-        })
-        this.userClickEmitter.addUserClickListener(object : UserClickListener {
-            override fun onUserClick(click: UserClick) {
-                handleUserClick(click);
+        this.eventManager.addEventListener(object : GuiEventListener {
+            override fun onEvent(event: GuiEvent) {
+                handleEvent(event);
             }
         })
     }
 
-    private fun handleUserClick(click: UserClick) {
-        when (click) {
-            is UserClick.UnpickedBuilding -> this.onUserAction(UserAction.PickBuilding(click.name));
-            is UserClick.CloseButton -> this.onUserAction(UserAction.CloseWindow)
-            is UserClick.SelectUnplacedTileBlock -> {
-                if (this.selectedClick != null) {
-                    this.selectedClick!!.second.deselect();
-                    if (this.selectedClick!!.first is UserClick.SelectUnplacedTileBlock) {
-                        this.selectedClick = null;
-                        return;
-                    }
+    private fun handleEvent(event: GuiEvent) {
+        when (event) {
+            is GuiEvent.ClickOn -> when (event) {
+                is GuiEvent.ClickOn.CloseButton -> this.onUserAction(UserAction.CloseWindow);
+                is GuiEvent.ClickOn.UnpickedBuilding -> this.onUserAction(UserAction.PickBuilding(event.name));
+                is GuiEvent.ClickOn.UnplacedTileBlock -> {
+                    // TODO: Only allow when we have the turn!
+                    if (!event.tileBlock.isBricks())
+                        this.eventManager.emitEvent(GuiEvent.BuildStage.Stage.UnplacedTileBlock(event.tileBlock));
                 }
-                this.selectedClick = Pair(click, click.selectable);
-                click.selectable.select();
+                is GuiEvent.ClickOn.PassButton -> TODO()
+
+                is GuiEvent.ClickOn.ActionCard -> TODO()
+                is GuiEvent.ClickOn.Board -> TODO()
+                is GuiEvent.ClickOn.ClearStage -> this.eventManager.emitEvent(GuiEvent.BuildStage.Clear);
+                is GuiEvent.ClickOn.RotateStage -> this.eventManager.emitEvent(GuiEvent.BuildStage.Rotate);
+                is GuiEvent.ClickOn.InventoryBuilding -> TODO()
             }
-            is UserClick.OnBoard -> {
-                if (selectedClick == null) return;
-                val previousClick = selectedClick!!.first;
-                when (previousClick) {
-                    is UserClick.SelectUnplacedTileBlock -> {
-                        val pos = Vec2(
-                            if (click.tileX % 2 == 0) click.tileX else click.tileX - 1,
-                            if (click.tileY % 2 == 0) click.tileY else click.tileY - 1
-                        )
-                        val tile = previousClick.tileBlock;
-                        onUserAction(UserAction.PlaceTileBlock(pos, tile));
-                        previousClick.selectable.deselect();
-                        selectedClick = null;
-                    }
-                    is UserClick.PickedBuilding -> {
-                        val tilePos = Vec2(click.tileX, click.tileY);
-                        onUserAction(UserAction.PlaceBuilding(tilePos, previousClick.buildingName));
-                        previousClick.selectable.deselect();
-                    }
-                    else -> {}
-                }
-            }
-            is UserClick.PickedBuilding -> {
-                // TODO: Unless this is clicked after the right card has been clicked
-                selectedClick?.second?.deselect();
-                selectedClick = Pair(click, click.selectable);
-                click.selectable.select();
-            }
-            /*
-                NO_ACTION_TYPE -> Sacre Coeur, just dibs. No select
-                SINGLE_ACTION_TYPE -> Jardin des plantes, select and place
-                DUAL_ACTION_TYPE -> Metropolitan, dibs and place building later. No select!
-                TRIPLE_ACTION_TYPE -> Select, select, select, place
-             */
-            is UserClick.OnCard -> {
-                when (click.cardType) {
-                    // No action types: Just dibs
-                    CardType.SACRE_COEUR -> {
-                        when (click.cardOwner) {
-                            PlayerColor.ORANGE -> {
-                                println("Clicked on card of opponent. Cant do this!");
-                                return;
-                            }
-                            PlayerColor.BLUE -> {
-                                println("Already owned this card. Cant do this!");
-                                return;
-                            }
-                            null -> {
-                                println("Clicked unselected card.");
-
-                            }
-                        }
-                    }
-
-                    // Single action: Select and place.
-                    CardType.LA_GRANDE_LUMIERE -> TODO()
-                    CardType.LE_PENSEUR -> TODO()
-                    CardType.FONTAINE_DES_MERS -> TODO()
-                    CardType.MOULIN_ROUGE -> TODO()
-                    CardType.JARDIN_DES_PLANTES -> TODO()
-                    CardType.LE_PEINTRE -> TODO()
-                    CardType.BOUQUINISTES_SUR_LA_SEINE -> TODO()
-                    CardType.LAMPADAIRE -> TODO()
-
-                    // Dual action: Dibs, and use later
-                    CardType.METROPOLITAN -> TODO() // Allow building over lantern
-                    CardType.CHARTIER -> TODO() // Allow build on opponent color
-
-                    // Triple action: Select card, select own building, select unpicked building, click board
-                    CardType.LEVITATION -> TODO()
-
-                }
+            is GuiEvent.BuildStage -> when (event) {
+                is GuiEvent.BuildStage.Clear -> {}
+                is GuiEvent.BuildStage.Rotate -> {}
+                is GuiEvent.BuildStage.Stage.Building -> TODO()
+                is GuiEvent.BuildStage.Stage.UnplacedTileBlock -> {}
+                is GuiEvent.BuildStage.Updated -> {}
             }
         }
     }
+
+//        when (click) {
+//            is GuiEvent.ClickOn.UnpickedBuilding -> this.onUserAction(UserAction.PickBuilding(click.name));
+//            is GuiEvent.ClickOn.CloseButton -> this.onUserAction(UserAction.CloseWindow)
+//            is GuiEvent.ClickOn.UnplacedTileBlock -> {
+//                TODO()
+//                if (this.selectClick != null) {
+//                    this.selectedClick!!.second.deselect();
+//                    if (this.selectedClick!!.first is ClickedOn.UnplacedTileBlock) {
+//                        this.selectedClick = null;
+//                        return;
+//                    }
+//                }
+//                this.selectedClick = Pair(click, click.selectable);
+//                click.selectable.select();
+//            }
+//            is GuiEvent.ClickOn.Board -> {
+//                TODO()
+//                if (selectedClick == null) return;
+//                val previousClick = selectedClick!!.first;
+//                when (previousClick) {
+//                    is ClickedOn.UnplacedTileBlock -> {
+//                        val pos = Vec2(
+//                            if (click.tileX % 2 == 0) click.tileX else click.tileX - 1,
+//                            if (click.tileY % 2 == 0) click.tileY else click.tileY - 1
+//                        )
+//                        val tile = previousClick.tileBlock;
+//                        onUserAction(UserAction.PlaceTileBlock(pos, tile));
+//                        previousClick.selectable.deselect();
+//                        selectedClick = null;
+//                    }
+//                    is ClickedOn.InventoryBuilding -> {
+//                        val tilePos = Vec2(click.tileX, click.tileY);
+//                        onUserAction(UserAction.PlaceBuilding(tilePos, previousClick.buildingName));
+//                        previousClick.selectable.deselect();
+//                    }
+//                    else -> {}
+//                }
+//            }
+//            is GuiEvent.ClickOn.InventoryBuilding -> {
+//                // TODO: Unless this is clicked after the right card has been clicked
+//                TODO()
+//                selectedClick?.second?.deselect();
+//                selectedClick = Pair(click, click.selectable);
+//                click.selectable.select();
+//            }
+//            /*
+//                NO_ACTION_TYPE -> Sacre Coeur, just dibs. No select
+//                SINGLE_ACTION_TYPE -> Jardin des plantes, select and place
+//                DUAL_ACTION_TYPE -> Metropolitan, dibs and place building later. No select!
+//                TRIPLE_ACTION_TYPE -> Select, select, select, place
+//             */
+//            is GuiEvent.ClickOn.ActionCard -> {
+//                TODO()
+//                when (click.cardType) {
+//                    // No action types: Just dibs
+//                    CardType.SACRE_COEUR -> {
+//                        when (click.cardOwner) {
+//                            PlayerColor.ORANGE -> {
+//                                println("Clicked on card of opponent. Cant do this!");
+//                                return;
+//                            }
+//                            PlayerColor.BLUE -> {
+//                                println("Already owned this card. Cant do this!");
+//                                return;
+//                            }
+//                            null -> {
+//                                println("Clicked unselected card.");
+//
+//                            }
+//                        }
+//                    }
+//
+//                    // Single action: Select and place.
+//                    CardType.LA_GRANDE_LUMIERE -> TODO()
+//                    CardType.LE_PENSEUR -> TODO()
+//                    CardType.FONTAINE_DES_MERS -> TODO()
+//                    CardType.MOULIN_ROUGE -> TODO()
+//                    CardType.JARDIN_DES_PLANTES -> TODO()
+//                    CardType.LE_PEINTRE -> TODO()
+//                    CardType.BOUQUINISTES_SUR_LA_SEINE -> TODO()
+//                    CardType.LAMPADAIRE -> TODO()
+//
+//                    // Dual action: Dibs, and use later
+//                    CardType.METROPOLITAN -> TODO() // Allow building over lantern
+//                    CardType.CHARTIER -> TODO() // Allow build on opponent color
+//
+//                    // Triple action: Select card, select own building, select unpicked building, click board
+//                    CardType.LEVITATION -> TODO()
+//
+//                }
+//            }
+//
+//            is GuiEvent.ClickOn.ClearStage -> TODO()
+//            is GuiEvent.ClickOn.RotateStage -> TODO()
+//            is GuiEvent.ClearStage -> TODO()
+//            is GuiEvent.RotateStage -> TODO()
+//            is GuiEvent.Stage.Building -> TODO()
+//        }
 
     override fun getServerAddress(): Pair<InetAddress, Int> {
         val startDialog = ConnectDialog();
@@ -207,12 +245,27 @@ class Gui : UI() {
     }
 }
 
-class GameWindow(private val userClickEmitter: UserClickEmitter) : JFrame() {
+class CenterPanel(clickManager: GuiEventManager) : JPanel() {
+    private val screenBoard = ScreenBoard(clickManager);
+    private val buildStage = BuildStage(clickManager);
 
-    private val screenBoard = ScreenBoard(userClickEmitter);
+    init {
+        this.layout = BorderLayout();
+        this.add(screenBoard, BorderLayout.CENTER);
+        this.add(buildStage, BorderLayout.NORTH);
+    }
+
+    fun updateBoard(newBoard: Board) {
+        this.screenBoard.updateBoard(newBoard);
+    }
+}
+
+class GameWindow(private val clickManager: GuiEventManager) : JFrame() {
+
+    private val centerPanel = CenterPanel(clickManager);
     private val bluePlayerArea = PlayerPanel(PlayerColor.BLUE);
     private val orangePlayerArea = PlayerPanel(PlayerColor.ORANGE);
-    private val bottomPanel = BottomPanel(userClickEmitter);
+    private val bottomPanel = BottomPanel(clickManager);
 
     init {
         this.setTitle("Parijs");
@@ -221,7 +274,7 @@ class GameWindow(private val userClickEmitter: UserClickEmitter) : JFrame() {
         this.preferredSize = Dimension(900, 700);
         this.layout = BorderLayout(10, 10);
 
-        this.add(screenBoard, BorderLayout.CENTER);
+        this.add(centerPanel, BorderLayout.CENTER);
 
         this.add(bottomPanel, BorderLayout.SOUTH);
 
@@ -231,7 +284,7 @@ class GameWindow(private val userClickEmitter: UserClickEmitter) : JFrame() {
         this.addWindowListener(object : WindowAdapter() {
             override fun windowClosing(e: WindowEvent?) {
                 super.windowClosing(e)
-                userClickEmitter.emitUserClick(UserClick.CloseButton);
+                clickManager.emitEvent(GuiEvent.ClickOn.CloseButton);
             }
         })
 
@@ -242,23 +295,114 @@ class GameWindow(private val userClickEmitter: UserClickEmitter) : JFrame() {
         this.bottomPanel.updateBoard(newBoard);
         this.bluePlayerArea.updateBoard(newBoard);
         this.orangePlayerArea.updateBoard(newBoard);
-        this.screenBoard.updateBoard(newBoard);
+        this.centerPanel.updateBoard(newBoard);
     }
 
     fun onPhaseChange(newPhase: GuiPhase) {
-        this.screenBoard.onPhaseChange(newPhase);
+
     }
 }
 
-class BottomPanel(private val userClickEmitter: UserClickEmitter) : JPanel() {
+sealed class StagedObject() {
+    data object None : StagedObject();
+    data class StagedBuilding(val building: Building, val screenBuilding: ScreenBuilding) : StagedObject();
+    data class StagedTileBlock(val tileBlock: TileBlock, val screenTileBlock: ScreenTileBlock) : StagedObject();
+}
+
+class BuildStage(private val eventManager: GuiEventManager) : JPanel() {
+    private val clearButton = JButton("Clear");
+    private val rotateButton = JButton("Rotate");
+
+    private var stagedObject: StagedObject = StagedObject.None;
+
+    init {
+        this.preferredSize = Dimension(300, 200);
+        this.layout = GridLayout(1, 3, 10, 10);
+
+        clearButton.addActionListener { eventManager.emitEvent(GuiEvent.ClickOn.ClearStage); }
+        rotateButton.addActionListener{ eventManager.emitEvent(GuiEvent.ClickOn.RotateStage); }
+
+        this.add(clearButton);
+        this.add(JPanel());
+        this.add(rotateButton);
+
+        eventManager.addEventListener(object : GuiEventListener {
+            override fun onEvent(event: GuiEvent) {
+                when (event) {
+                    is GuiEvent.BuildStage -> when (event) {
+                        GuiEvent.BuildStage.Clear -> {
+                            println("Clearing stage!");
+                            stageObject(StagedObject.None);
+                        }
+                        is GuiEvent.BuildStage.Rotate -> rotateBuilding();
+                        is GuiEvent.BuildStage.Stage.Building -> println("Staging building");
+                        is GuiEvent.BuildStage.Stage.UnplacedTileBlock -> {
+                            println("Staging tileBlock!");
+                            stageTileBlock(event.tileBlock);
+                        }
+                        is GuiEvent.BuildStage.Updated -> {}
+                    }
+                    else -> {}
+                }
+            }
+        })
+    }
+
+    private fun rotateBuilding() {
+        when (val currentStaged = this.stagedObject) {
+            is StagedObject.None -> {}
+            is StagedObject.StagedBuilding -> TODO()
+            is StagedObject.StagedTileBlock -> {
+                println("Before rotating: %s".format(currentStaged.tileBlock.toString()));
+                currentStaged.tileBlock.rotate(true);
+                currentStaged.screenTileBlock.updateTiles(currentStaged.tileBlock);
+
+                this.eventManager.emitEvent(GuiEvent.BuildStage.Updated(currentStaged));
+                println("Rotated tileblock: %s".format(currentStaged.tileBlock.toString()));
+            }
+        }
+    }
+
+    private fun stageTileBlock(tileBlock: TileBlock) {
+        val screenTileBlock = ScreenTileBlock();
+        screenTileBlock.updateTiles(tileBlock);
+        this.stageObject(StagedObject.StagedTileBlock(tileBlock, screenTileBlock));
+    }
+
+    private fun stageObject(newObject: StagedObject) {
+        this.stagedObject = newObject;
+
+        val newComponent: JComponent = when (newObject) {
+            is StagedObject.None -> JPanel();
+            is StagedObject.StagedBuilding -> newObject.screenBuilding;
+            is StagedObject.StagedTileBlock -> newObject.screenTileBlock;
+        }
+
+        this.remove(1);
+        this.add(newComponent, 1);
+        this.revalidate();
+        this.repaint();
+
+        this.eventManager.emitEvent(GuiEvent.BuildStage.Updated(newObject));
+    }
+
+    override fun paintComponent(g: Graphics?) {
+        super.paintComponent(g)
+        if (g == null) return;
+        g.color = Color.PINK;
+        g.fillRect(0, 0, width, height);
+    }
+}
+
+class BottomPanel(private val clickManager: GuiEventManager) : JPanel() {
     private val unpickedBuildings = BuildingCollection(object : BuildingSelectionListener {
         override fun onSelect(building: BuildingName) {
-            userClickEmitter.emitUserClick(UserClick.UnpickedBuilding(building));
+            clickManager.emitEvent(GuiEvent.ClickOn.UnpickedBuilding(building));
         }
     });
 
-    private val rightPanel = BottomRightPanel(userClickEmitter);
-    private val cardsPanel = CardsCollection(userClickEmitter);
+    private val rightPanel = BottomRightPanel(clickManager);
+    private val cardsPanel = CardsCollection(clickManager);
 
     init {
         this.layout = BorderLayout();
@@ -275,7 +419,7 @@ class BottomPanel(private val userClickEmitter: UserClickEmitter) : JPanel() {
     }
 }
 
-class ScreenCard(val userClickEmitter: UserClickEmitter) : JComponent() {
+class ScreenCard(val clickManager: GuiEventManager) : JComponent() {
     private var cardType: CardType? = null;
     private var cardState = CardState.UNPICKED_AND_UNUSED;
     private var cardOwner: PlayerColor? = null;
@@ -299,7 +443,7 @@ class ScreenCard(val userClickEmitter: UserClickEmitter) : JComponent() {
             override fun mouseClicked(e: MouseEvent?) {
                 if (e == null) return;
                 if (cardType == null) return;
-                userClickEmitter.emitUserClick(UserClick.OnCard(cardType!!, cardState, cardOwner))
+                clickManager.emitEvent(GuiEvent.ClickOn.ActionCard(cardType!!, cardState, cardOwner))
             }
         })
     }
@@ -346,7 +490,7 @@ class ScreenCard(val userClickEmitter: UserClickEmitter) : JComponent() {
     }
 }
 
-class CardsCollection(userClickEmitter: UserClickEmitter) : JPanel() {
+class CardsCollection(clickManager: GuiEventManager) : JPanel() {
     private val screenCards = Vector<ScreenCard>();
     private val CARD_COLS = 2;
     private val CARD_ROWS = 4;
@@ -357,7 +501,7 @@ class CardsCollection(userClickEmitter: UserClickEmitter) : JPanel() {
         this.preferredSize = Dimension(SIZE, SIZE);
 
         for (i in 0..<8) {
-            val card = ScreenCard(userClickEmitter);
+            val card = ScreenCard(clickManager);
             this.screenCards.add(card);
             this.add(card);
         }
@@ -372,7 +516,7 @@ class CardsCollection(userClickEmitter: UserClickEmitter) : JPanel() {
     }
 }
 
-class BottomRightPanel(private val userClickEmitter: UserClickEmitter) : JPanel() {
+class BottomRightPanel(private val clickManager: GuiEventManager) : JPanel() {
     private val WIDTH = 200;
     private val BORDER_SIZE = 10;
     private val message = JLabel("Text goes here");
@@ -387,16 +531,7 @@ class BottomRightPanel(private val userClickEmitter: UserClickEmitter) : JPanel(
     init {
         this.unplacedTileBlock.addTileBlockClickListener(object : TileBlockMouseListener {
             override fun onSelectedTile(tileBlock: TileBlock, relTileX: Int, relTileY: Int) {
-                userClickEmitter.emitUserClick(UserClick.SelectUnplacedTileBlock(tileBlock, object : Selectable {
-                    override fun select() {
-                        tileBlockIsSelected = true;
-                        updateTileBlockBorder()
-                    }
-                    override fun deselect() {
-                        tileBlockIsSelected = false;
-                        updateTileBlockBorder()
-                    }
-                }));
+                clickManager.emitEvent(GuiEvent.ClickOn.UnplacedTileBlock(tileBlock));
             }
             override fun onAbsoluteMouseEnter(e: MouseEvent) {
                 tileBlockIsHovered = true;
@@ -675,7 +810,7 @@ open class ScreenTileBlock : JPanel() {
     }
 }
 
-class ScreenBoardTileLayer(val userClickEmitter: UserClickEmitter) : JPanel() {
+class ScreenBoardTileLayer(val clickManager: GuiEventManager) : JPanel() {
     private val BLOCK_COLS = 4;
     private val BLOCK_ROWS = 4;
 
@@ -687,35 +822,32 @@ class ScreenBoardTileLayer(val userClickEmitter: UserClickEmitter) : JPanel() {
             for (column in 0..<BLOCK_COLS) {
                 val tileBlock = ScreenTileBlock();
 
-                val hoverManager = object : TileBlockMouseListener, UserClickListener {
+                val hoverManager = object : TileBlockMouseListener, GuiEventListener {
                     var unplacedTileBlock: TileBlock? = null;
                     var originalTileBlock: TileBlock? = null;
                     var isReplaced = false;
 
-                    override fun onUserClick(click: UserClick) {
+                    override fun onEvent(event: GuiEvent) {
                         synchronized(tileBlock) {
-                            if (click is UserClick.SelectUnplacedTileBlock) {
-                                unplacedTileBlock = click.tileBlock.copy();
+                            if (event is GuiEvent.ClickOn.UnplacedTileBlock) {
+                                unplacedTileBlock = event.tileBlock.copy();
                                 // We want to place a tileblock
                                 if (tileBlock.getDisplayedTileBlock().topLeft != Tile.BRICKS) {
                                     tileBlock.cursor = Cursor.getSystemCustomCursor("Invalid.32x32");
 //                                    tileBlock.cursor = Cursor(Cursor.WAIT_CURSOR);
-                                    println("Setting cursor to invalid")
                                 } else {
                                     tileBlock.cursor = Cursor(Cursor.HAND_CURSOR);
-                                    println("Setting cursor to valid");
                                 }
                             } else {
                                 unplacedTileBlock = null;
                                 tileBlock.cursor = Cursor.getDefaultCursor();
-                                println("Restoring cursor");
                             }
                             isReplaced = false;
                         }
                     }
                     override fun onSelectedTile(tileBlock: TileBlock, relTileX: Int, relTileY: Int) {
                         synchronized(tileBlock) {
-                            userClickEmitter.emitUserClick(UserClick.OnBoard(column*2 + relTileX, row*2 + relTileY))
+                            clickManager.emitEvent(GuiEvent.ClickOn.Board(column*2 + relTileX, row*2 + relTileY))
                         }
                     }
                     override fun onAbsoluteMouseEnter(e: MouseEvent) {
@@ -745,7 +877,7 @@ class ScreenBoardTileLayer(val userClickEmitter: UserClickEmitter) : JPanel() {
                 }
 
                 tileBlock.addTileBlockClickListener(hoverManager);
-                userClickEmitter.addUserClickListener(hoverManager);
+                clickManager.addEventListener(hoverManager);
 
                 this.add(tileBlock);
                 this.tileBlocks.add(tileBlock);
@@ -779,10 +911,10 @@ class ScreenBoardTileLayer(val userClickEmitter: UserClickEmitter) : JPanel() {
     }
 }
 
-class ScreenBoard(userClickEmitter: UserClickEmitter) : JLayeredPane() {
+class ScreenBoard(clickManager: GuiEventManager) : JLayeredPane() {
     private val BOARD_SIZE = 300;
 
-    val tileLayer = ScreenBoardTileLayer(userClickEmitter);
+    val tileLayer = ScreenBoardTileLayer(clickManager);
 
     init {
         this.add(tileLayer, DEFAULT_LAYER);

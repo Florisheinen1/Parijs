@@ -288,12 +288,18 @@ class TileBlock(
             Vec2(1, 1),
         )) {
     override fun rotate(clockwise: Boolean) {
-        val temporaryTile = if (clockwise) this.topRight else this.bottomLeft;
+        val list = Vector(listOf(topLeft, topRight, bottomRight, bottomLeft));
 
-        this.topLeft = if (clockwise) this.bottomLeft else topRight;
-        this.topRight = if (clockwise) this.topLeft else bottomRight;
-        this.bottomLeft = if (clockwise) this.bottomRight else topLeft;
-        this.bottomRight = temporaryTile;
+        if (clockwise) {
+            list.add(0, list.removeAt(list.size - 1));
+        } else {
+            list.add(list.removeAt(0));
+        }
+
+        this.topLeft = Tile.valueOf(list[0].name);
+        this.topRight = Tile.valueOf(list[1].name);
+        this.bottomRight = Tile.valueOf(list[2].name);
+        this.bottomLeft = Tile.valueOf(list[3].name);
 
         super.rotate(clockwise);
     }
@@ -320,14 +326,18 @@ class TileBlock(
         return cp;
     }
 
+    fun isBricks(): Boolean {
+        return this.topLeft == Tile.BRICKS && this.topRight == Tile.BRICKS && this.bottomLeft == Tile.BRICKS && this.bottomRight == Tile.BRICKS;
+    }
+
     override fun toString(): String {
-        return this.topLeft.name + "," + this.topRight.name + "," + this.bottomLeft.name + "," + this.bottomRight.name
+        return this.topLeft.name + "," + this.topRight.name + "," + this.bottomRight.name + "," + this.bottomLeft.name
     }
 }
 
 // Class to resemble anything that can be placed on the board
 abstract class Placeable(var direction: Direction = Direction.NORTH, var parts: Array<Vec2>) {
-    protected open fun rotate(clockwise: Boolean) {
+    open fun rotate(clockwise: Boolean) {
         this.direction = this.direction.rotate(clockwise);
         for (part in this.parts) {
             part.rotate(clockwise);
