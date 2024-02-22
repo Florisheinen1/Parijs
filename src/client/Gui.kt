@@ -368,8 +368,7 @@ class BottomPanel(private val eventManager: GuiEventManager) : JPanel() {
     }
 }
 
-class ScreenCard(val clickManager: GuiEventManager) : JComponent() {
-    private var cardType: CardType? = null;
+class ScreenCard(private val cardType: CardType, eventManager: GuiEventManager) : JComponent() {
     private var cardState = CardState.UNPICKED_AND_UNUSED;
     private var cardOwner: PlayerColor? = null;
 
@@ -391,20 +390,15 @@ class ScreenCard(val clickManager: GuiEventManager) : JComponent() {
 
             override fun mouseClicked(e: MouseEvent?) {
                 if (e == null) return;
-                if (cardType == null) return;
-                clickManager.emitEvent(GuiEvent.ClickOn.ActionCard(cardType!!, cardState, cardOwner))
+                eventManager.emitEvent(GuiEvent.ClickOn.ActionCard(cardType, cardState, cardOwner))
             }
-        })
+        });
     }
 
     override fun paintComponent(g: Graphics?) {
         super.paintComponent(g);
         if (g == null) return;
-
-        if (this.cardType == null) {
-            g.color = Color.BLACK;
-            g.fillRect(0, 0, width, height);
-        } else this.drawCard(g, this.cardType!!, this.cardOwner);
+        this.drawCard(g, this.cardType, this.cardOwner);
     }
 
     private fun drawCard(g: Graphics, cardType: CardType, cardOwner: PlayerColor?) {
@@ -430,17 +424,9 @@ class ScreenCard(val clickManager: GuiEventManager) : JComponent() {
         g.color = Color.BLACK;
         g.drawString(cardType.name, 20, 40);
     }
-
-    fun updateCard(card: Card) {
-        this.cardType = card.type;
-        this.cardState = card.state;
-        this.cardOwner = card.owner;
-        repaint();
-    }
 }
 
-class CardsCollection(clickManager: GuiEventManager) : JPanel() {
-    private val screenCards = Vector<ScreenCard>();
+class CardsCollection(eventManager: GuiEventManager) : JPanel() {
     private val CARD_COLS = 2;
     private val CARD_ROWS = 4;
     private val SIZE = 400;
@@ -449,19 +435,28 @@ class CardsCollection(clickManager: GuiEventManager) : JPanel() {
         this.layout = GridLayout(CARD_ROWS, CARD_COLS);
         this.preferredSize = Dimension(SIZE, SIZE);
 
-        for (i in 0..<8) {
-            val card = ScreenCard(clickManager);
-            this.screenCards.add(card);
-            this.add(card);
-        }
+        eventManager.addEventListener(object : GuiEventListener {
+            override fun onEvent(event: GuiEvent) {
+                if (event is GuiEvent.UpdateBoard) {
+                    val isInitialized = components.isNotEmpty();
+                    val cardsAreKnown = event.newBoard.inGameCards.isNotEmpty();
+
+                    if (!isInitialized && cardsAreKnown) {
+                        initializeCards(event.newBoard.inGameCards, eventManager);
+                    }
+                }
+                // TODO: Handle card update events
+            }
+        })
     }
 
-    fun updateCards(cards: List<Card>) {
-        for (i in 0..<8) {
-            val screenCard = this.screenCards[i];
-            val card = cards[i];
-            screenCard.updateCard(card);
+    private fun initializeCards(cards: List<Card>, eventManager: GuiEventManager) {
+        println("Initializing cards!");
+        for (card in cards) {
+            this.add(ScreenCard(card.type, eventManager));
         }
+        this.revalidate();
+        this.repaint();
     }
 }
 
@@ -830,7 +825,6 @@ class ScreenBoardTileLayer(eventManager: GuiEventManager) : JPanel() {
                         );
                         originalTileBlock = newTileBlock;
                         tileBlock.updateTiles(newTileBlock);
-                        println("Updating from event: %d, %d to %s".format(blockColumn, blockRow, newTileBlock))
                     }
                     else -> {}
                 }
