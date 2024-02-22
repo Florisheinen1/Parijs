@@ -45,6 +45,8 @@ sealed class GuiEvent {
 
         data class Updated(val stagedObject: StagedObject) : BuildStage();
     }
+
+    data class UpdateBoard(val newBoard: Board) : GuiEvent();
 }
 
 interface GuiEventManager {
@@ -106,6 +108,7 @@ class Gui : UI() {
                 is GuiEvent.BuildStage.Stage.UnplacedTileBlock -> {}
                 is GuiEvent.BuildStage.Updated -> {}
             }
+            is GuiEvent.UpdateBoard -> {}
         }
     }
 
@@ -659,13 +662,14 @@ class ScreenTile(type: Tile = Tile.BRICKS) : JComponent() {
                 g.fillRect(0, 0, width, height);
             }
             Tile.LANTERN -> {
-                g.color = Color(128, 128, 128);
+//                g.color = Color(128, 128, 128);
+                g.color = Color(255, 255 ,100);
                 g.fillRect(0, 0, width, height);
 
-                val xUnit = width / 4;
-                val yUnit = height / 4;
-                g.color = Color(255, 255 ,100);
-                g.fillRect(0 + xUnit, y + yUnit, width - 2*xUnit, height - 2*yUnit);
+//                val xUnit = width / 4;
+//                val yUnit = height / 4;
+//                g.color = Color(255, 255 ,100);
+//                g.fillRect(0 + xUnit, y + yUnit, width - 2*xUnit, height - 2*yUnit);
             }
             Tile.BRICKS -> {
                 g.color = Color(128, 128, 128);
@@ -810,6 +814,25 @@ open class ScreenTileBlock : JPanel() {
     }
 }
 
+//                        synchronized(this) {
+//
+//
+////                            if (event is GuiEvent.ClickOn.UnplacedTileBlock) {
+////                                unplacedTileBlock = event.tileBlock.copy();
+////                                // We want to place a tileblock
+////                                if (tileBlock.getDisplayedTileBlock().topLeft != Tile.BRICKS) {
+////                                    tileBlock.cursor = Cursor.getSystemCustomCursor("Invalid.32x32");
+//////                                    tileBlock.cursor = Cursor(Cursor.WAIT_CURSOR);
+////                                } else {
+////                                    tileBlock.cursor = Cursor(Cursor.HAND_CURSOR);
+////                                }
+////                            } else {
+////                                unplacedTileBlock = null;
+////                                tileBlock.cursor = Cursor.getDefaultCursor();
+////                            }
+////                            isReplaced = false;
+//                        }
+
 class ScreenBoardTileLayer(val clickManager: GuiEventManager) : JPanel() {
     private val BLOCK_COLS = 4;
     private val BLOCK_ROWS = 4;
@@ -823,26 +846,19 @@ class ScreenBoardTileLayer(val clickManager: GuiEventManager) : JPanel() {
                 val tileBlock = ScreenTileBlock();
 
                 val hoverManager = object : TileBlockMouseListener, GuiEventListener {
-                    var unplacedTileBlock: TileBlock? = null;
-                    var originalTileBlock: TileBlock? = null;
+                    var stagedObject: StagedObject = StagedObject.None;
+
+                    var originalTileBlock = tileBlock.getDisplayedTileBlock();
                     var isReplaced = false;
 
                     override fun onEvent(event: GuiEvent) {
-                        synchronized(tileBlock) {
-                            if (event is GuiEvent.ClickOn.UnplacedTileBlock) {
-                                unplacedTileBlock = event.tileBlock.copy();
-                                // We want to place a tileblock
-                                if (tileBlock.getDisplayedTileBlock().topLeft != Tile.BRICKS) {
-                                    tileBlock.cursor = Cursor.getSystemCustomCursor("Invalid.32x32");
-//                                    tileBlock.cursor = Cursor(Cursor.WAIT_CURSOR);
-                                } else {
-                                    tileBlock.cursor = Cursor(Cursor.HAND_CURSOR);
-                                }
+                        if (event is GuiEvent.BuildStage.Updated) stagedObject = event.stagedObject;
+                        if (stagedObject is StagedObject.StagedTileBlock) {
+                            if (originalTileBlock.isBricks()) {
+                                cursor = Cursor(Cursor.HAND_CURSOR);
                             } else {
-                                unplacedTileBlock = null;
-                                tileBlock.cursor = Cursor.getDefaultCursor();
+                                cursor = Cursor.getSystemCustomCursor("Invalid.32x32");
                             }
-                            isReplaced = false;
                         }
                     }
                     override fun onSelectedTile(tileBlock: TileBlock, relTileX: Int, relTileY: Int) {
@@ -851,27 +867,21 @@ class ScreenBoardTileLayer(val clickManager: GuiEventManager) : JPanel() {
                         }
                     }
                     override fun onAbsoluteMouseEnter(e: MouseEvent) {
-                        synchronized(tileBlock) {
-                            if (unplacedTileBlock != null) {
-                                val current = tileBlock.getDisplayedTileBlock();
-                                if (current.topLeft == Tile.BRICKS) {
-                                    originalTileBlock = current.copy();
-                                    tileBlock.updateTiles(unplacedTileBlock!!.copy());
-                                    isReplaced = true;
-//                                    cursor = Cursor(Cursor.HAND_CURSOR);
-                                } else {
-//                                    cursor = Cursor.getSystemCustomCursor("Invalid.32x32");
-                                }
+                        when (stagedObject) {
+                            is StagedObject.None -> {}
+                            is StagedObject.StagedBuilding -> TODO()
+                            is StagedObject.StagedTileBlock -> {
+                                val temporaryTiles = (stagedObject as StagedObject.StagedTileBlock).tileBlock.copy();
+                                tileBlock.updateTiles(temporaryTiles);
+                                isReplaced = true;
                             }
                         }
                     }
+
                     override fun onAbsoluteMouseExit(e: MouseEvent) {
-                        synchronized(tileBlock) {
-                            if (isReplaced) {
-                                tileBlock.updateTiles(originalTileBlock!!);
-                                isReplaced = false;
-                                originalTileBlock = null;
-                            }
+                        if (isReplaced) {
+                            tileBlock.updateTiles(originalTileBlock);
+                            isReplaced = false;
                         }
                     }
                 }
@@ -891,7 +901,6 @@ class ScreenBoardTileLayer(val clickManager: GuiEventManager) : JPanel() {
         g.color = Color.RED;
         g.fillRect(0, 0, width, height);
     }
-
 
     fun updateBoard(newBoard: Board) {
         for (row in 0..<BLOCK_ROWS) {
