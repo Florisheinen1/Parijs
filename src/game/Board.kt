@@ -12,7 +12,7 @@ open class Board {
     var unplacedBlueBlocks = Vector<TileBlock?>(); // nulls mean that we do not know what tile it is
     var unplacedOrangeBlocks = Vector<TileBlock?>();
 
-    private var tiles = Array(SIZE*SIZE) {Tile.BRICKS};
+    var tiles = Array(SIZE*SIZE) {Tile.BRICKS};
 
     var unpickedBuildings = Vector<BuildingName>();
     var blueInventoryBuildings = Vector<BuildingName>();
@@ -246,7 +246,7 @@ sealed class Building(val parts: Array<Vec2>) {
         return Vec2(end.x - origin.x + 1, end.y - origin.y + 1);
     }
 
-    private fun getOrigin(): Vec2 {
+    fun getOrigin(): Vec2 {
         var minX = this.parts[0].x;
         var minY = this.parts[0].y;
         for (part in this.parts) {
