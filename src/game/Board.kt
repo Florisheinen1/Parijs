@@ -13,6 +13,7 @@ open class Board {
     var unplacedOrangeBlocks = Vector<BoardPiece.TileBlock?>();
 
     var tiles = Array(SIZE*SIZE) {Tile.BRICKS};
+    val placedTopPieces = Vector<BoardPiece.Top>();
 
     var unpickedBuildings = Vector<BuildingName>();
     var blueInventoryBuildings = Vector<BuildingName>();
@@ -142,6 +143,7 @@ class Vec2(var x: Int, var y: Int) {
             this.y = newY;
         }
     }
+    fun clone(): Vec2 = Vec2(x, y);
 }
 
 enum class Tile {
@@ -253,7 +255,7 @@ sealed class BoardPiece(val rotation: Direction, val parts: List<Vec2>) {
             this.bottomRight = this.bottomRight.invert();
         }
 
-        fun copy(): TileBlock {
+        fun clone(): TileBlock {
             return TileBlock(
                     this.rotation,
                     this.topLeft,

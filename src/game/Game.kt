@@ -56,7 +56,7 @@ class Game(val player1: Player, val player2: Player) {
 
         while (!this.partOneIsFinished()) {
             // Get a move that is allowed according to the rules
-            val validMove = this.getValidMovePart1(playerColorWithTurn);
+            val validMove = this.getValidMovePhase1(playerColorWithTurn);
 
             // If the player placed a block, remember this event
             if (validMove is UserMove.PlaceBlockAt) lastPlayerColorThatPlacedTileBlock = playerColorWithTurn;
@@ -80,10 +80,18 @@ class Game(val player1: Player, val player2: Player) {
         println("Part 2 starts with player: " + playerColor.name);
         this.player1.startPhase2();
         this.player2.startPhase2();
+
+        var playerColorWithTurn = playerColor;
+
+        while (!this.isGameOver()) {
+            // Get a move that is allowed according to the rules
+            val validMove = this.getValidMovePhase2(playerColorWithTurn);
+
+        }
     }
 
     // Inverts colors when necessary. Returns non-inverted
-    private fun getValidMovePart1(playerColor: PlayerColor): UserMove {
+    private fun getValidMovePhase1(playerColor: PlayerColor): UserMove {
         val playerWithTurn = this.getPlayerOfColor(playerColor);
 
         val openTileBlock: TileBlock? = when (playerColor) {
@@ -108,6 +116,10 @@ class Game(val player1: Player, val player2: Player) {
 
             if (moveResponse is MoveResponse.Accept) return move;
         }
+    }
+
+    private fun getValidMovePhase2(playerColor: PlayerColor): UserMove {
+        return UserMove.Pass;
     }
 
     private fun isMoveAllowed(move: UserMove): MoveResponse {
@@ -140,6 +152,10 @@ class Game(val player1: Player, val player2: Player) {
 
     private fun partOneIsFinished(): Boolean {
         return this.board.unplacedBlueBlocks.isEmpty() && this.board.unplacedOrangeBlocks.isEmpty();
+    }
+
+    private fun isGameOver(): Boolean {
+        return false; // TODO: Implement this
     }
 
     private fun pickRandomPlayerColor(): PlayerColor {

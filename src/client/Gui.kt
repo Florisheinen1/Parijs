@@ -48,6 +48,7 @@ sealed class GuiEvent {
     }
 
     data class UpdateBoard(val newBoard: Board) : GuiEvent();
+    data class UpdateGuiPhase(val phase: GuiPhase) : GuiEvent();
 }
 
 interface GuiEventManager {
@@ -74,14 +75,12 @@ class Gui : UI() {
 
     private val window = GameWindow(eventManager);
     private var guiPhase: GuiPhase = INITIAL_GUI_PHASE;
-    private var selectClick: GuiEvent? = null;
+//    private var selectClick: GuiEvent? = null;
     private var stagedObject: StagedObject = StagedObject.None;
 
     init {
         this.eventManager.addEventListener(object : GuiEventListener {
-            override fun onEvent(event: GuiEvent) {
-                handleEvent(event);
-            }
+            override fun onEvent(event: GuiEvent) { handleEvent(event);}
         })
     }
 
@@ -89,17 +88,32 @@ class Gui : UI() {
         when (event) {
             is GuiEvent.ClickOn -> when (event) {
                 is GuiEvent.ClickOn.CloseButton -> this.onUserAction(UserAction.CloseWindow);
-                is GuiEvent.ClickOn.UnpickedBuilding -> this.onUserAction(UserAction.PickBuilding(event.name));
+                is GuiEvent.ClickOn.UnpickedBuilding -> {
+                    if (this.guiPhase is GuiPhase.GamePhase1) {
+                        val phase = this.guiPhase as GuiPhase.GamePhase1;
+                        if (phase.hasTurn) {
+                            this.onUserAction(UserAction.PickBuilding(event.name));
+                        }
+                    }
+                }
                 is GuiEvent.ClickOn.UnplacedTileBlock -> {
-                    // TODO: Only allow when we have the turn!
-                    if (!event.tileBlock.isBricks())
-                        this.eventManager.emitEvent(GuiEvent.BuildStage.Stage.UnplacedTileBlock(event.tileBlock));
+                    if (this.guiPhase is GuiPhase.GamePhase1) {
+                        val phase = this.guiPhase as GuiPhase.GamePhase1;
+                        if (phase.hasTurn) {
+                            if (!event.tileBlock.isBricks()) {
+                                this.eventManager.emitEvent(GuiEvent.BuildStage.Stage.UnplacedTileBlock(event.tileBlock));
+                            }
+                        }
+                    }
                 }
                 is GuiEvent.ClickOn.Board -> {
                     println("Clicked on board...");
                     when (this.stagedObject) {
                         is StagedObject.None -> {}
-                        is StagedObject.StagedBuilding -> TODO()
+                        is StagedObject.StagedBuilding -> {
+                            val building = (this.stagedObject as StagedObject.StagedBuilding).building;
+
+                        }
                         is StagedObject.StagedTileBlock -> {
                             val stagedTileBlock = (this.stagedObject as StagedObject.StagedTileBlock).tileBlock;
                             val position = Vec2(
@@ -111,10 +125,17 @@ class Gui : UI() {
                     }
                 }
                 is GuiEvent.ClickOn.InventoryBuilding -> {
-                    // TODO: Only allow when we have the turn + in phase 2
                     // Only Blue, (us, the client), owns buildings that can be placed
-                    if (event.owner == PlayerColor.BLUE)
-                        this.eventManager.emitEvent(GuiEvent.BuildStage.Stage.Building(event.buildingName));
+                    if (event.owner == PlayerColor.BLUE) {
+                        // And clicking only works in phase 2
+                        if (this.guiPhase is GuiPhase.GamePhase2) {
+                            // When we have the turn
+                            val phase = this.guiPhase as GuiPhase.GamePhase2;
+                            if (phase.hasTurn) {
+                                this.eventManager.emitEvent(GuiEvent.BuildStage.Stage.Building(event.buildingName));
+                            }
+                        }
+                    }
                 }
 
                 is GuiEvent.ClickOn.PassButton -> TODO()
@@ -131,6 +152,14 @@ class Gui : UI() {
                 is GuiEvent.BuildStage.Updated -> this.stagedObject = event.stagedObject;
             }
             is GuiEvent.UpdateBoard -> {}
+            is GuiEvent.UpdateGuiPhase -> {
+                when (event.phase) {
+                    is GuiPhase.InLobby -> openGameWindow()
+                    else -> {}
+                }
+                this.guiPhase = event.phase;
+                println("Phase changed to: %s".format(guiPhase.toString()));
+            }
         }
     }
 
@@ -187,19 +216,9 @@ class Gui : UI() {
     }
 
     override fun updatePhase(newPhase: GuiPhase) {
-        when (newPhase) {
-            is GuiPhase.Connecting -> TODO()
-            is GuiPhase.InLobby -> {
-                if (this.guiPhase is GuiPhase.Connecting) this.openGameWindow();
-            }
-            is GuiPhase.GamePart1 -> {
-//                println("Part 1 with turn: %s".format(newPhase.hasTurn));
-            }
-            is GuiPhase.GamePart2 -> TODO()
-            is GuiPhase.GameEnd -> TODO()
+        SwingUtilities.invokeLater {
+            this.eventManager.emitEvent(GuiEvent.UpdateGuiPhase(newPhase));
         }
-
-        this.guiPhase = newPhase;
     }
 
     override fun updateGameState(board: Board) {
@@ -512,25 +531,35 @@ class BottomRightPanel(private val eventManager: GuiEventManager) : JPanel() {
 
         eventManager.addEventListener(object : GuiEventListener {
             override fun onEvent(event: GuiEvent) {
-                if (event is GuiEvent.UpdateBoard) {
-                    updateTileBlock(event.newBoard);
+                when (event) {
+                    is GuiEvent.UpdateBoard -> updateTileBlock(event.newBoard);
+                    is GuiEvent.UpdateGuiPhase -> updateText(event.phase);
+                    else -> {}
                 }
             }
         })
+    }
+
+    fun updateText(phase: GuiPhase) {
+        val newText = when (phase) {
+            GuiPhase.Connecting -> "Connecting...";
+            is GuiPhase.GameEnd -> "Game ended";
+            is GuiPhase.GamePhase1 -> if (phase.hasTurn) "Pick a building or place a tile" else "Waiting for opponent...";
+            is GuiPhase.GamePhase2 -> if (phase.hasTurn) "Place a building or play a card" else "Waiting for opponent...";
+            GuiPhase.InLobby -> "Waiting for game to start...";
+        }
+        this.message.text = "<html>"+ newText +"</html>";
     }
 
     fun updateTileBlock(newBoard: Board) {
         val emptyTileBlock = TileBlock(Direction.NORTH, Tile.BRICKS, Tile.BRICKS, Tile.BRICKS, Tile.BRICKS);
         if (newBoard.unplacedBlueBlocks.isEmpty()) {
             this.unplacedTileBlock.updateTiles(emptyTileBlock);
-            println("Setting unplaced tileblock to empty because no more tile blocks left");
         } else {
             val topBlock = newBoard.unplacedBlueBlocks[0];
             if (topBlock == null) {
-                println("Setting unplaced tileBlock to empty because top block is unknown");
                 this.unplacedTileBlock.updateTiles(emptyTileBlock);
             } else {
-                println("Setting unplaced tileBlock because top block is known!");
                 this.unplacedTileBlock.updateTiles(topBlock);
             }
         }
@@ -776,25 +805,6 @@ open class ScreenTileBlock : JPanel() {
     }
 }
 
-//                        synchronized(this) {
-//
-//
-////                            if (event is GuiEvent.ClickOn.UnplacedTileBlock) {
-////                                unplacedTileBlock = event.tileBlock.copy();
-////                                // We want to place a tileblock
-////                                if (tileBlock.getDisplayedTileBlock().topLeft != Tile.BRICKS) {
-////                                    tileBlock.cursor = Cursor.getSystemCustomCursor("Invalid.32x32");
-//////                                    tileBlock.cursor = Cursor(Cursor.WAIT_CURSOR);
-////                                } else {
-////                                    tileBlock.cursor = Cursor(Cursor.HAND_CURSOR);
-////                                }
-////                            } else {
-////                                unplacedTileBlock = null;
-////                                tileBlock.cursor = Cursor.getDefaultCursor();
-////                            }
-////                            isReplaced = false;
-//                        }
-
 class BoardPanel(eventManager: GuiEventManager) : JPanel() {
     private val tilesPerSide = 8;
     private val targetBoardSizePixels = 300;
@@ -839,6 +849,7 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
     private val tilesPerSide = 8;
 
     private val tiles = Array(tilesPerSide * tilesPerSide) {Tile.BRICKS};
+    private val placedTopPieces = Vector<Top>();
 
     private var hoveredTilePos: Vec2? = null;
 
@@ -880,6 +891,12 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
 
     private fun updateBoard(newBoard: Board) {
         newBoard.tiles.copyInto(this.tiles);
+
+        this.placedTopPieces.clear();
+        for (piece in newBoard.placedTopPieces) {
+            this.placedTopPieces.add(piece);
+        }
+
         repaint();
     }
 
@@ -921,9 +938,15 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
         this.paintTiles(g);
         this.paintHoveredTile(g);
         // Then, paint all built buildings
-        // TODO: this
+        this.paintPlacedTopPieces(g);
         // Last, paint the "hovered" staged objects
         this.paintStagedObject(g);
+    }
+
+    private fun paintPlacedTopPieces(g: Graphics) {
+        for (piece in this.placedTopPieces) {
+
+        }
     }
 
     private fun paintStagedObject(g: Graphics) {

@@ -84,11 +84,12 @@ class Client(private val ui: UI) : Player {
 
             this.ui.updateGameState(this.board);
         }
-        this.ui.updatePhase(GuiPhase.GamePart1(false));
+        this.ui.updatePhase(GuiPhase.GamePhase1(false));
     }
 
     override fun startPhase2() {
         println(" ===== Phase 2 started! =====");
+        this.ui.updatePhase(GuiPhase.GamePhase2(false));
     }
 
     override fun askTurnPhase1(availableBuildings: List<BuildingName>, topTileBlock: TileBlock?): UserMove {
@@ -127,7 +128,7 @@ class Client(private val ui: UI) : Player {
         this.ui.addUserActionListener(listener);
 
         // Indicate the user is free to make the move
-        this.ui.updatePhase(GuiPhase.GamePart1(true));
+        this.ui.updatePhase(GuiPhase.GamePhase1(true));
 
         // Wait for a move to be done
         while (move == null) Thread.sleep(100);
@@ -161,6 +162,8 @@ class Client(private val ui: UI) : Player {
             }
         }
 
+        this.ui.updatePhase(GuiPhase.GamePhase1(false));
+
         return validatedMove;
     }
 
@@ -181,7 +184,7 @@ class Client(private val ui: UI) : Player {
         }
         this.ui.addUserActionListener(listener);
 
-        // TODO: Indicate the user is allowed to make a move
+        this.ui.updatePhase(GuiPhase.GamePhase2(true));
 
         while (move == null) Thread.sleep(100);
 
@@ -196,6 +199,9 @@ class Client(private val ui: UI) : Player {
             is UserMove.Pass -> TODO()
             else -> println("Received phase 1 move while in phase 2");
         }
+
+        this.ui.updatePhase(GuiPhase.GamePhase2(false));
+
         return validatedMove;
     }
 

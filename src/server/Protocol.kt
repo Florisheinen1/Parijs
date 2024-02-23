@@ -1,5 +1,0 @@
-package server
-
-class ProtocolPacket {
-
-}

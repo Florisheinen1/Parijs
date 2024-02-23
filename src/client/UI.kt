@@ -47,14 +47,10 @@ sealed class UserAction {
     data object Pass : UserAction();
 }
 
-interface PhaseChangeListener {
-    fun onPhaseChange(newPhase: GuiPhase);
-}
-
 sealed class GuiPhase { // Rename to UIPhase
     data object Connecting : GuiPhase();
     data object InLobby : GuiPhase();
-    data class GamePart1(val hasTurn: Boolean) : GuiPhase();
-    data class GamePart2(val hasTurn: Boolean) : GuiPhase();
+    data class GamePhase1(val hasTurn: Boolean) : GuiPhase();
+    data class GamePhase2(val hasTurn: Boolean) : GuiPhase();
     data class GameEnd(val isWinner: Boolean) : GuiPhase();
 }
