@@ -1,6 +1,7 @@
 package protocol
 
 import game.*
+import game.BoardPiece.*
 import java.text.ParseException
 
 sealed class Packet {

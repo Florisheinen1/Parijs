@@ -1,6 +1,7 @@
 package game
 
 import java.util.*
+import game.BoardPiece.*
 
 class Game(val player1: Player, val player2: Player) {
     val board: Board = Board();

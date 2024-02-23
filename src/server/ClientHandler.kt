@@ -1,6 +1,7 @@
 package server
 
 import game.*
+import game.BoardPiece.*
 import protocol.*;
 import java.net.Socket;
 import java.nio.charset.Charset

@@ -2,7 +2,7 @@ package client
 
 import game.Board
 import game.BuildingName
-import game.TileBlock
+import game.BoardPiece.*
 import game.Vec2
 import java.net.InetAddress
 import java.util.*

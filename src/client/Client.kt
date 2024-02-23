@@ -1,6 +1,7 @@
 package client
 
 import game.*
+import game.BoardPiece.*;
 import java.net.ConnectException
 import java.net.Socket
 import java.util.*

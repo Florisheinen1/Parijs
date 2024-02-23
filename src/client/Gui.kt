@@ -1,6 +1,7 @@
 package client
 
 import game.*
+import game.BoardPiece.*
 import java.awt.*
 import java.awt.event.*
 import java.net.InetAddress
@@ -257,7 +258,7 @@ class GameWindow(private val eventManager: GuiEventManager) : JFrame() {
 
 sealed class StagedObject() {
     data object None : StagedObject();
-    data class StagedBuilding(val building: Building, val screenBuilding: ScreenBuilding) : StagedObject();
+    data class StagedBuilding(val building: Top.Building, val screenBuilding: ScreenBuilding) : StagedObject();
     data class StagedTileBlock(val tileBlock: TileBlock, val screenTileBlock: ScreenTileBlock) : StagedObject();
 }
 
@@ -322,7 +323,7 @@ class BuildStage(private val eventManager: GuiEventManager) : JPanel() {
     }
 
     private fun stageBuilding(buildingName: BuildingName) {
-        val building = Building.fromName(buildingName);
+        val building = Top.Building.fromName(buildingName);
         val screenBuilding = ScreenBuilding(building);
         this.stageObject(StagedObject.StagedBuilding(building, screenBuilding))
     }
@@ -939,6 +940,9 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
                 drawBuilding(g, building, tileOrigin);
             }
             is StagedObject.StagedTileBlock -> {
+                // Do not draw over already placed tileBlocks
+                if (getTileAt(tilePos.x, tilePos.y) != Tile.BRICKS) return;
+
                 val tileBlock = (this.stagedObject as StagedObject.StagedTileBlock).tileBlock;
                 val tileBlockPos = this.getTileBlockPosition(tilePos.x, tilePos.y);
                 this.drawTileBlock(g, tileBlock, tileBlockPos);
@@ -947,7 +951,7 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
         }
     }
 
-    private fun drawBuilding(g: Graphics, building: Building, tileOrigin: Vec2) {
+    private fun drawBuilding(g: Graphics, building: Top.Building, tileOrigin: Vec2) {
         val borderSize = 5;
         val tileSize = this.width / this.tilesPerSide;
 
@@ -1076,14 +1080,19 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
             }
 
             Tile.LANTERN -> {
-//                g.color = Color(128, 128, 128);
-                g.color = Color(255, 255, 100);
+                g.color = Color(128, 128, 128);
+//                g.color = Color(255, 255, 100);
                 g.fillRect(rect.x, rect.y, rect.width, rect.height);
 
-//                val xUnit = width / 4;
-//                val yUnit = height / 4;
-//                g.color = Color(255, 255 ,100);
-//                g.fillRect(0 + xUnit, y + yUnit, width - 2*xUnit, height - 2*yUnit);
+                val xUnit = rect.width / 4;
+                val yUnit = rect.height / 4;
+                g.color = Color(255, 255 ,100);
+                g.fillRect(
+                    rect.x + xUnit,
+                    rect.y + yUnit,
+                    rect.width - 2*xUnit,
+                    rect.height - 2*yUnit
+                );
             }
 
             Tile.BRICKS -> {
@@ -1236,7 +1245,7 @@ class ScreenBoard(eventManager: GuiEventManager) : JLayeredPane() {
 //    }
 }
 
-class ScreenBuilding(val building: Building) : JComponent() {
+class ScreenBuilding(val building: Top.Building) : JComponent() {
     private val borderSize = 5;
     var isHovered = false;
     var selectionListener: BuildingSelectionListener? = null;
@@ -1395,7 +1404,7 @@ class BuildingCollection(private val buildingSelectionListener: BuildingSelectio
         this.screenBuildingChildren.clear();
 
         for (buildingName in buildings) {
-            val screenBuilding = ScreenBuilding(Building.fromName(buildingName));
+            val screenBuilding = ScreenBuilding(Top.Building.fromName(buildingName));
             screenBuilding.selectionListener = buildingSelectionListener;
             this.screenBuildingChildren.add(screenBuilding);
             this.add(screenBuilding);

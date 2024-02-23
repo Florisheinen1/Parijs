@@ -1,5 +1,7 @@
 package game
 
+import game.BoardPiece.*;
+
 interface Player {
     fun startPhase1(cards: List<CardType>);
     fun startPhase2();
