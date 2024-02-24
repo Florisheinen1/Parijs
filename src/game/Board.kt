@@ -109,10 +109,10 @@ open class Board {
         }
 
         for (block in this.unplacedBlueBlocks) {
-            newBoard.unplacedBlueBlocks.add(block?.copy());
+            newBoard.unplacedBlueBlocks.add(block?.clone());
         }
         for (block in this.unplacedOrangeBlocks) {
-            newBoard.unplacedOrangeBlocks.add(block?.copy());
+            newBoard.unplacedOrangeBlocks.add(block?.clone());
         }
 
         for (i in 0..<this.tiles.size) {
@@ -208,8 +208,8 @@ class Vec2(var x: Int, var y: Int) {
             this.x = newX;
             this.y = newY;
         } else {
-            val newX = this.y;
-            val newY = -this.x;
+            val newX = -this.y;
+            val newY = this.x;
             this.x = newX;
             this.y = newY;
         }
@@ -291,12 +291,12 @@ sealed class BoardPiece(var rotation: Direction, val parts: List<Vec2>) {
         this.rotation = this.rotation.getRotated(clockwise);
     }
 
-    data class TileBlock(
-        var _rotation: Direction,
+    class TileBlock(
+        rotation: Direction,
         var topLeft: Tile,
         var topRight: Tile,
         var bottomLeft: Tile,
-        var bottomRight: Tile) : BoardPiece(_rotation, listOf(
+        var bottomRight: Tile) : BoardPiece(rotation, listOf(
             Vec2(0, 0),
             Vec2(1, 0),
             Vec2(0, 1),
@@ -396,12 +396,16 @@ sealed class BoardPiece(var rotation: Direction, val parts: List<Vec2>) {
                     // Now rotate the building accordingly
                     when (rotation) {
                         Direction.NORTH -> {} // No additional rotation necessary
-                        Direction.EAST -> building.rotateParts(true);
+                        Direction.EAST -> {
+                            building.rotateParts(true);
+                        }
                         Direction.SOUTH -> {
                             building.rotateParts(true);
                             building.rotateParts(true);
                         }
-                        Direction.WEST -> building.rotateParts(false);
+                        Direction.WEST -> {
+                            building.rotateParts(false);
+                        }
                     }
                     building.normalizeParts();
 

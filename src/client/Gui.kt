@@ -125,27 +125,49 @@ class Gui : UI() {
                                     if (event.tileX % 2 == 0) event.tileX else event.tileX - 1,
                                     if (event.tileY % 2 == 0) event.tileY else event.tileY - 1
                             );
-                            this.onUserAction(UserAction.PlaceTileBlock(position, stagedTileBlock));
+
+                            val supposedTileBlock = TileBlock(
+                                stagedTileBlock.rotation,
+                                stagedTileBlock.topLeft,
+                                stagedTileBlock.topRight,
+                                stagedTileBlock.bottomLeft,
+                                stagedTileBlock.bottomRight,
+                            )
+                            supposedTileBlock.move(position);
+
+                            if (this.board.doesTileBlockFit(supposedTileBlock)) {
+                                this.onUserAction(UserAction.PlaceTileBlock(position, stagedTileBlock));
+                            } else {
+                                println("Cannot place new tileblock at %d, %d".format(position.x, position.y));
+                            }
                         }
                     }
                 }
                 is GuiEvent.ClickOn.InventoryBuilding -> {
                     // Only Blue, (us, the client), owns buildings that can be placed
                     if (event.owner == PlayerColor.BLUE) {
-                        this.eventManager.emitEvent(GuiEvent.BuildStage.Stage.Building(event.buildingName));
-                        // TODO: check if we are in correct game phase
-//                        // And clicking only works in phase 2
-//                        if (this.guiPhase is GuiPhase.GamePhase2) {
-//                            // When we have the turn
-//                            val phase = this.guiPhase as GuiPhase.GamePhase2;
-//                            if (phase.hasTurn) {
-//                                this.eventManager.emitEvent(GuiEvent.BuildStage.Stage.Building(event.buildingName));
-//                            }
-//                        }
+                        // And clicking only works in phase 2
+                        if (this.guiPhase is GuiPhase.GamePhase2) {
+                            // When we have the turn
+                            val phase = this.guiPhase as GuiPhase.GamePhase2;
+                            if (phase.hasTurn) {
+                                this.eventManager.emitEvent(GuiEvent.BuildStage.Stage.Building(event.buildingName));
+                            }
+                        }
                     }
                 }
 
-                is GuiEvent.ClickOn.PassButton -> TODO()
+                is GuiEvent.ClickOn.PassButton -> {
+                    // Only works when we have the turn
+                    val hasTurn = when (this.guiPhase) {
+                        is GuiPhase.GamePhase1 -> (this.guiPhase as GuiPhase.GamePhase1).hasTurn;
+                        is GuiPhase.GamePhase2 -> (this.guiPhase as GuiPhase.GamePhase2).hasTurn;
+                        else -> false;
+                    }
+                    if (hasTurn) {
+                        this.onUserAction(UserAction.Pass);
+                    }
+                }
 
                 is GuiEvent.ClickOn.ActionCard -> TODO()
                 is GuiEvent.ClickOn.ClearStage -> this.eventManager.emitEvent(GuiEvent.BuildStage.Clear);
@@ -327,10 +349,11 @@ class BuildStage(private val eventManager: GuiEventManager) : JPanel() {
             is StagedObject.None -> {}
             is StagedObject.StagedBuilding -> {
                 val newRotation = currentStaged.rotation.getRotated(true);
+                println("Old rotation: %s, new rotation: %s".format(currentStaged.rotation, newRotation));
                 this.stageBuilding(currentStaged.buildingName, newRotation);
             }
             is StagedObject.StagedTileBlock -> {
-                val newTileBlock = currentStaged.tileBlock.copy();
+                val newTileBlock = currentStaged.tileBlock.clone();
                 newTileBlock.rotate(true);
                 stageTileBlock(newTileBlock);
             }
@@ -509,6 +532,8 @@ class BottomRightPanel(private val eventManager: GuiEventManager) : JPanel() {
             }
         })
         unplacedTileBlock.border = BorderFactory.createLineBorder(Color.WHITE, 5);
+
+        this.passButton.addActionListener { eventManager.emitEvent(GuiEvent.ClickOn.PassButton); }
 
         this.preferredSize = Dimension(WIDTH, WIDTH);
 
@@ -1181,7 +1206,7 @@ class ScreenBoardTileLayer(eventManager: GuiEventManager) : JPanel() {
 
                     }
                     is StagedObject.StagedTileBlock -> {
-                        val temporaryTiles = (stagedObject as StagedObject.StagedTileBlock).tileBlock.copy();
+                        val temporaryTiles = (stagedObject as StagedObject.StagedTileBlock).tileBlock.clone();
                         tileBlock.updateTiles(temporaryTiles);
                         isReplaced = true;
                     }
@@ -1220,36 +1245,6 @@ class ScreenBoardBuildingLayer : JPanel() {
         println("Painting building layer: %d, %d".format(width, height));
         g.color = Color.BLUE;
         g.fillRect(0, 0, width, height);
-    }
-}
-
-class ScreenBoard(eventManager: GuiEventManager) : JLayeredPane() {
-    private val BOARD_SIZE = 300;
-
-    private val tileLayer = ScreenBoardTileLayer(eventManager);
-
-    init {
-        this.add(tileLayer, PALETTE_LAYER);
-
-        this.addComponentListener(object : ComponentAdapter() {
-            override fun componentResized(e: ComponentEvent?) {
-                updateBoardPosition();
-            }
-        })
-
-        val a = ScreenBoardBuildingLayer();
-        a.setBounds(0, 0, width, height)
-        this.add(a, DEFAULT_LAYER);
-//        this.add(ScreenBoardBuildingLayer(), DEFAULT_LAYER, 0);
-//        val buildingTest = ScreenBuilding(Building.fromName(BuildingName.ZIGZAG));
-//        buildingTest.setBounds(5, 5, width/2, height/2);
-//        this.add(JButton("Hello there"), DEFAULT_LAYER);
-    }
-
-    private fun updateBoardPosition() {
-        for (layer in this.components) {
-            layer.setBounds(width / 2 - BOARD_SIZE / 2, height / 2 - BOARD_SIZE / 2, BOARD_SIZE, BOARD_SIZE);
-        }
     }
 }
 

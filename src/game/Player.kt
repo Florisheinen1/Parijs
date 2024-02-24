@@ -38,7 +38,7 @@ sealed class UserMove {
         return when (this) {
             is Pass -> Pass;
             is PickBuilding -> PickBuilding(this.buildingName);
-            is PlaceBlockAt -> PlaceBlockAt(this.position, this.tileBlock.copy());
+            is PlaceBlockAt -> PlaceBlockAt(this.position, this.tileBlock.clone());
             is CardAction.claimSacreCoeur -> TODO()
             is PlaceBuilding -> PlaceBuilding(this.buildingName, this.position, this.rotation);
         }

@@ -25,9 +25,9 @@ class Game(val player1: Player, val player2: Player) {
         val blocks = Vector<TileBlock?>();
         for (block in GameConstants.ALL_BLOCKS_OF_BLUE) {
             when (player) {
-                PlayerColor.BLUE -> blocks.add(block.copy())
+                PlayerColor.BLUE -> blocks.add(block.clone())
                 PlayerColor.ORANGE -> {
-                    val copy = block.copy();
+                    val copy = block.clone();
                     copy.invert();
                     blocks.add(copy)
                 }
