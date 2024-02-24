@@ -3,6 +3,7 @@ package client
 import game.Board
 import game.BuildingName
 import game.BoardPiece.*
+import game.Direction
 import game.Vec2
 import java.net.InetAddress
 import java.util.*
@@ -40,10 +41,11 @@ abstract class UserActionListener {
 }
 
 sealed class UserAction {
+    // TODO: MErge this with UserMove?
     data object CloseWindow : UserAction();
     data class PickBuilding(var buildingName: BuildingName) : UserAction();
     data class PlaceTileBlock(var position: Vec2, val tileBlock: TileBlock) : UserAction();
-    data class PlaceBuilding(var position: Vec2, val buildingName: BuildingName) : UserAction();
+    data class PlaceBuilding(val buildingName: BuildingName, var position: Vec2, val rotation: Direction) : UserAction();
     data object Pass : UserAction();
 }
 

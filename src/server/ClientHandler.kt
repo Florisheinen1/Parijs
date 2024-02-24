@@ -34,6 +34,7 @@ class ClientHandler(socket: Socket) : Player {
     }
 
     fun sendPacket(packet: Packet) {
+        println("Sending: %s".format(packet.serialize()));
         val data = (packet.serialize() + "\n").toByteArray(Charset.defaultCharset());
         this.writer.write(data);
     }
@@ -91,8 +92,26 @@ class ClientHandler(socket: Socket) : Player {
     }
 
     override fun askTurnPhase2(): UserMove {
-        println("Got asked for turn in phase 2"); // TODO: Implement this
-        TODO();
+        var receivedMove: UserMove? = null;
+
+        val listener = object : PacketListener() {
+            override fun onIncomingMessage(packet: Packet) {
+                if (packet is Packet.ReplyWithMove) {
+                    receivedMove = packet.move;
+                }
+            }
+        }
+
+        // Add the packet listener, so we start listening to moves from the user
+        this.addPacketListener(listener);
+        // Send the request for a move to the user
+        this.sendPacket(Packet.AskForMovePhase2);
+        // Wait for the user to have replied
+        while (receivedMove == null) Thread.sleep(100);
+        // After the user has replied, remove the listener again
+        this.removePacketListener(listener);
+
+        return receivedMove!!;
     }
 
     override fun respondToMove(response: MoveResponse) {

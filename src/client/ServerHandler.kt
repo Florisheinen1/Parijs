@@ -31,6 +31,7 @@ class ServerHandler(socket: Socket, private val player: Player) {
     }
 
     fun sendPacket(packet: Packet) {
+        println("Sending: %s".format(packet.serialize()));
         val data = (packet.serialize() + "\n").toByteArray(Charset.defaultCharset());
         this.writer.write(data);
     }

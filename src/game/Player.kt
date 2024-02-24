@@ -1,5 +1,6 @@
 package game
 
+import client.UserAction
 import game.BoardPiece.*;
 
 interface Player {
@@ -28,7 +29,7 @@ sealed class UserMove {
     data class PickBuilding(val buildingName: BuildingName): UserMove();
     data class PlaceBlockAt(val position: Vec2, val tileBlock: TileBlock): UserMove();
     // Phase 2
-    data class PlaceBuilding(val buildingName: BuildingName, val position: Vec2) : UserMove();
+    data class PlaceBuilding(val buildingName: BuildingName, val position: Vec2, val rotation: Direction) : UserMove();
     sealed class CardAction : UserMove() {
         data object claimSacreCoeur : CardAction();
     }
@@ -39,7 +40,7 @@ sealed class UserMove {
             is PickBuilding -> PickBuilding(this.buildingName);
             is PlaceBlockAt -> PlaceBlockAt(this.position, this.tileBlock.copy());
             is CardAction.claimSacreCoeur -> TODO()
-            is PlaceBuilding -> TODO()
+            is PlaceBuilding -> PlaceBuilding(this.buildingName, this.position, this.rotation);
         }
     }
 

@@ -77,7 +77,7 @@ sealed class Packet {
     private fun moveResponseToString(moveResponse: MoveResponse): String {
         return when (moveResponse) {
             MoveResponse.Accept -> "ACCEPT"
-            is MoveResponse.Deny -> "DENY" + Packet.DELIMITER + sanitize(moveResponse.reason)
+            is MoveResponse.Deny -> "DENY" + DELIMITER + sanitize(moveResponse.reason)
         }
     }
 
@@ -87,7 +87,7 @@ sealed class Packet {
             is UserMove.PickBuilding -> "PICK_BUILDING" + DELIMITER + move.buildingName.name;
             is UserMove.PlaceBlockAt -> "PLACE_BLOCK" + DELIMITER + vecToString(move.position) + DELIMITER + tileBlockToString(move.tileBlock);
 
-            is UserMove.PlaceBuilding -> "PLACE_BUILDING" + DELIMITER + vecToString(move.position) + DELIMITER + move.buildingName.name;
+            is UserMove.PlaceBuilding -> "PLACE_BUILDING" + DELIMITER + move.buildingName.name + DELIMITER + vecToString(move.position) + DELIMITER + move.rotation.name;
             is UserMove.CardAction -> TODO();
         }
     }
@@ -153,7 +153,7 @@ class Parser {
             "PICK_BUILDING" -> UserMove.PickBuilding(BuildingName.valueOf(delimited[1]))
             "PLACE_BLOCK" -> UserMove.PlaceBlockAt(vecFromString(delimited[1]), tileBlockFromString(delimited[2])!!)
 
-            "PLACE_BUILDING" -> UserMove.PlaceBuilding(BuildingName.valueOf(delimited[1]), vecFromString(delimited[2]))
+            "PLACE_BUILDING" -> UserMove.PlaceBuilding(BuildingName.valueOf(delimited[1]), vecFromString(delimited[2]), Direction.valueOf(delimited[3]));
             else -> throw ParseException("Failed to parse: '%s'.".format(s), 0);
         }
     }

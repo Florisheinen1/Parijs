@@ -170,11 +170,12 @@ class Client(private val ui: UI) : Player {
     override fun askTurnPhase2(): UserMove {
         println("\nWe received the turn for phase 2.");
 
+        // First, create a listener that listens for a move from the user
         var move: UserMove? = null;
         val listener = object : UserActionListener() {
             override fun onUserAction(action: UserAction) {
                 when (action) {
-                    is UserAction.PlaceBuilding -> move = UserMove.PlaceBuilding(action.buildingName, action.position);
+                    is UserAction.PlaceBuilding -> move = UserMove.PlaceBuilding(action.buildingName, action.position, action.rotation);
                     is UserAction.Pass -> move = UserMove.Pass;
                     else -> {
                         println("Received unexpected move!");
@@ -182,21 +183,33 @@ class Client(private val ui: UI) : Player {
                 }
             }
         }
+        // And add this listener
         this.ui.addUserActionListener(listener);
-
+        // Signal the UI that a move needs to be made
         this.ui.updatePhase(GuiPhase.GamePhase2(true));
-
+        // Wait until we received a move
         while (move == null) Thread.sleep(100);
-
+        // And remove the listener afterward again
         this.ui.removeUserActionListener(listener);
+
         val validatedMove = move!!;
         when (validatedMove) {
+            is UserMove.Pass -> {}
             is UserMove.PlaceBuilding -> {
                 synchronized(this.board) {
-
+                    val placedBuilding = Top.Building.from(
+                        validatedMove.buildingName,
+                        validatedMove.position,
+                        validatedMove.rotation
+                    );
+                    this.board.placedTopPieces.add(placedBuilding);
+                    this.ui.updateGameState(this.board);
                 }
+                println("Performed placed building user action");
             }
-            is UserMove.Pass -> TODO()
+            is UserMove.CardAction -> {
+                println("Performing card action...");
+            }
             else -> println("Received phase 1 move while in phase 2");
         }
 
@@ -228,9 +241,18 @@ class Client(private val ui: UI) : Player {
                     this.board.unplacedOrangeBlocks.removeAt(0);
                     this.ui.updateGameState(this.board);
                 }
-            } else -> {
-                println("Updating phase 2 move while in phase 1");
             }
+            is UserMove.PlaceBuilding -> {
+                println("Opponent placed building %s at: (%d, %d) with rotation %s".format(move.buildingName.name, move.position.x, move.position.y, move.rotation.name));
+                synchronized(this.board) {
+                    this.board.blueInventoryBuildings.removeElement(move.buildingName);
+                    val building = Top.Building.from(move.buildingName, move.position, move.rotation);
+                    println(" -> Building parts: %s".format(building.parts.joinToString { "(%s, %s)".format(it.x, it.y) }));
+                    this.board.placedTopPieces.add(building);
+                    this.ui.updateGameState(this.board);
+                }
+            }
+            is UserMove.CardAction -> TODO()
         }
     }
 
