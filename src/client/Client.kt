@@ -202,7 +202,8 @@ class Client(private val ui: UI) : Player {
                         validatedMove.position,
                         validatedMove.rotation
                     );
-                    this.board.placedTopPieces.add(placedBuilding);
+                    this.board.placedTopPiecesByBlue.addElement(placedBuilding);
+                    this.board.blueInventoryBuildings.removeElement(placedBuilding.name);
                     this.ui.updateGameState(this.board);
                 }
                 println("Performed placed building user action");
@@ -248,7 +249,8 @@ class Client(private val ui: UI) : Player {
                     this.board.blueInventoryBuildings.removeElement(move.buildingName);
                     val building = Top.Building.from(move.buildingName, move.position, move.rotation);
                     println(" -> Building parts: %s".format(building.parts.joinToString { "(%s, %s)".format(it.x, it.y) }));
-                    this.board.placedTopPieces.add(building);
+                    this.board.placedTopPiecesByOrange.add(building);
+                    this.board.orangeInventoryBuildings.removeElement(building.name);
                     this.ui.updateGameState(this.board);
                 }
             }

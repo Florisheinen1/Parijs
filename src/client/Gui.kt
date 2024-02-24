@@ -77,6 +77,7 @@ class Gui : UI() {
     private var guiPhase: GuiPhase = INITIAL_GUI_PHASE;
 //    private var selectClick: GuiEvent? = null;
     private var stagedObject: StagedObject = StagedObject.None;
+    private var board = Board();
 
     init {
         this.eventManager.addEventListener(object : GuiEventListener {
@@ -113,8 +114,10 @@ class Gui : UI() {
                             val staged = this.stagedObject as StagedObject.StagedBuilding;
                             // Buildings can only be staged if we have the turn in phase 2, so no need to check it again
                             val position = Vec2(event.tileX, event.tileY);
-
-                            this.onUserAction(UserAction.PlaceBuilding(staged.buildingName, position, staged.rotation));
+                            val supposedPlacedBuilding = Top.Building.from(staged.buildingName, position, staged.rotation);
+                            if (this.board.doesTopPieceFit(supposedPlacedBuilding, PlayerColor.BLUE)) {
+                                this.onUserAction(UserAction.PlaceBuilding(staged.buildingName, position, staged.rotation));
+                            }
                         }
                         is StagedObject.StagedTileBlock -> {
                             val stagedTileBlock = (this.stagedObject as StagedObject.StagedTileBlock).tileBlock;
@@ -130,7 +133,7 @@ class Gui : UI() {
                     // Only Blue, (us, the client), owns buildings that can be placed
                     if (event.owner == PlayerColor.BLUE) {
                         this.eventManager.emitEvent(GuiEvent.BuildStage.Stage.Building(event.buildingName));
-                        // TODO: Fix this
+                        // TODO: check if we are in correct game phase
 //                        // And clicking only works in phase 2
 //                        if (this.guiPhase is GuiPhase.GamePhase2) {
 //                            // When we have the turn
@@ -155,7 +158,7 @@ class Gui : UI() {
                 is GuiEvent.BuildStage.Stage.UnplacedTileBlock -> {}
                 is GuiEvent.BuildStage.Updated -> this.stagedObject = event.stagedObject;
             }
-            is GuiEvent.UpdateBoard -> {}
+            is GuiEvent.UpdateBoard -> this.board = event.newBoard;
             is GuiEvent.UpdateGuiPhase -> {
                 when (event.phase) {
                     is GuiPhase.InLobby -> openGameWindow()
@@ -227,7 +230,7 @@ class Gui : UI() {
 
     override fun updateGameState(board: Board) {
         SwingUtilities.invokeLater {
-            this.eventManager.emitEvent(GuiEvent.UpdateBoard(board));
+            this.eventManager.emitEvent(GuiEvent.UpdateBoard(board.deepClone()));
         }
     }
 
@@ -834,14 +837,11 @@ class BoardPanel(eventManager: GuiEventManager) : JPanel() {
 }
 
 class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListener {
-    private val tilesPerSide = 8;
-
-    private val tiles = Array(tilesPerSide * tilesPerSide) {Tile.BRICKS};
-    private val placedTopPieces = Vector<Top>();
-
     private var hoveredTilePos: Vec2? = null;
 
     private var stagedObject: StagedObject = StagedObject.None;
+
+    private var board = Board();
 
     init {
         eventManager.addEventListener(this);
@@ -860,11 +860,12 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
                 hoveredTilePos = null;
                 repaint();
             }
+
             override fun mouseClicked(e: MouseEvent?) {
                 super.mouseClicked(e)
                 if (e == null) return;
-                val pos = getTilePosition(e.x, e.y);
-                eventManager.emitEvent(GuiEvent.ClickOn.Board(pos.x, pos.y));
+                val clickPos = getTilePosition(e.x, e.y);
+                eventManager.emitEvent(GuiEvent.ClickOn.Board(clickPos.x, clickPos.y));
             }
         });
     }
@@ -878,19 +879,13 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
     }
 
     private fun updateBoard(newBoard: Board) {
-        newBoard.tiles.copyInto(this.tiles);
-
-        this.placedTopPieces.clear();
-        for (piece in newBoard.placedTopPieces) {
-            this.placedTopPieces.add(piece);
-        }
-
+        this.board = newBoard;
         repaint();
     }
 
     // Returns the tile type and tile position on the board
     private fun getTilePosition(mouseX: Int, mouseY: Int): Vec2 {
-        val tileSize = this.width / this.tilesPerSide;
+        val tileSize = this.width / this.board.SIZE;
         return Vec2(
             mouseX / tileSize,
             mouseY / tileSize,
@@ -932,7 +927,15 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
     }
 
     private fun paintPlacedTopPieces(g: Graphics) {
-        for (piece in this.placedTopPieces) {
+        for (piece in this.board.placedTopPiecesByBlue) {
+            when (piece) {
+                is Top.Building -> {
+                    paintBuilding(g, piece, true);
+                }
+                else -> TODO()
+            }
+        }
+        for (piece in this.board.placedTopPiecesByOrange) {
             when (piece) {
                 is Top.Building -> paintBuilding(g, piece, true);
                 else -> TODO()
@@ -946,15 +949,14 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
         when (this.stagedObject) {
             is StagedObject.StagedBuilding -> {
                 val staged = (this.stagedObject as StagedObject.StagedBuilding);
-
-                val allowed = this.canPlaceBuildingHere(staged.buildingName, tilePos, staged.rotation);
-
                 val building = Top.Building.from(staged.buildingName, tilePos, staged.rotation);
+                val fits = this.board.doesTopPieceFit(building, PlayerColor.BLUE);
 
-                this.paintBuilding(g, building, allowed);
+                this.paintBuilding(g, building, fits);
             }
             is StagedObject.StagedTileBlock -> {
                 // Do not draw over already placed tileBlocks
+                // TODO: Use check defined in Board class
                 if (getTileAt(tilePos.x, tilePos.y) != Tile.BRICKS) return;
 
                 val tileBlock = (this.stagedObject as StagedObject.StagedTileBlock).tileBlock;
@@ -965,29 +967,9 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
         }
     }
 
-    private fun canPlaceBuildingHere(buildingName: BuildingName, tilePosition: Vec2, rotation: Direction): Boolean {
-        val building = Top.Building.from(buildingName, tilePosition, rotation);
-        for (part in building.parts) {
-            if (
-                part.x >= tilesPerSide || part.x < 0 ||
-                part.y >= tilesPerSide || part.y < 0
-            ) {
-                return false;
-            }
-
-            val tileUnderPart = this.getTileAt(part.x, part.y);
-            if (tileUnderPart != Tile.BLUE && tileUnderPart != Tile.SHARED) {
-                // That means we cannot build this building here
-                // TODO: Do this unless we have placed the CardAction: Shared tile somewhere here!
-                return false;
-            }
-        }
-        return true;
-    }
-
     private fun paintBuilding(g: Graphics, building: Top.Building, allowed: Boolean) {
         val borderSize = 5;
-        val tileSize = this.width / this.tilesPerSide;
+        val tileSize = this.width / this.board.SIZE;
 
         for (part in building.parts) {
             val neighbors = this.getNeighborsOfPart(part, building.parts.toList());
@@ -1030,7 +1012,7 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
     }
 
     private fun drawTileBlock(g: Graphics, tileBlock: TileBlock, blockPos: Vec2) {
-        val tileSize = this.width / this.tilesPerSide;
+        val tileSize = this.width / this.board.SIZE;
         val topLeftRect = Rectangle(
                 blockPos.x * tileSize,
                 blockPos.y * tileSize, tileSize, tileSize);
@@ -1053,7 +1035,7 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
     private fun paintHoveredTile(g: Graphics) {
         val tilePos = this.hoveredTilePos ?: return;
 
-        val tileSize = this.width / this.tilesPerSide;
+        val tileSize = this.width / this.board.SIZE;
 
         val tileScreenPos = Vec2(
             tilePos.x * tileSize,
@@ -1067,7 +1049,7 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
     private fun paintHoveredTileBlock(g: Graphics) {
         val tilePos = this.hoveredTilePos ?: return;
         val tileBlockPos = getTileBlockPosition(tilePos.x, tilePos.y);
-        val tileSize = this.width / this.tilesPerSide;
+        val tileSize = this.width / this.board.SIZE;
 
         val tileBlockScreenPos = Vec2(
             tileBlockPos.x * tileSize,
@@ -1079,9 +1061,9 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
     }
 
     private fun paintTiles(g: Graphics) {
-        val tileSize = this.width / this.tilesPerSide;
-        for (row in 0..<this.tilesPerSide) {
-            for (column in 0..<this.tilesPerSide) {
+        val tileSize = this.width / this.board.SIZE;
+        for (row in 0..<this.board.SIZE) {
+            for (column in 0..<this.board.SIZE) {
                 val tileType = this.getTileAt(column, row);
                 val tileOrigin = Vec2(
                     column * tileSize,
@@ -1093,7 +1075,7 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
         }
     }
     private fun getTileAt(column: Int, row: Int): Tile {
-        return this.tiles[row * this.tilesPerSide + column];
+        return this.board.tiles[row * this.board.SIZE + column];
     }
     private fun paintTile(g: Graphics, rect: Rectangle, tileType: Tile) {
         when (tileType) {

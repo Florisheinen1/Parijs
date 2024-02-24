@@ -168,10 +168,13 @@ class Game(val player1: Player, val player2: Player) {
             }
             is UserMove.PlaceBuilding -> {
                 val placedBuilding = Top.Building.from(move.buildingName, move.position, move.rotation);
-                this.board.placedTopPieces.add(placedBuilding);
+
+                val targetList = if (playerColor == PlayerColor.BLUE) this.board.placedTopPiecesByBlue else this.board.placedTopPiecesByOrange;
+                targetList.addElement(placedBuilding);
 
                 val sourceInventory = if (playerColor == PlayerColor.BLUE) this.board.blueInventoryBuildings else this.board.orangeInventoryBuildings;
                 sourceInventory.removeElement(move.buildingName);
+
                 println("Placed building on board: %s".format(move.buildingName.name));
             }
             is UserMove.CardAction -> TODO()

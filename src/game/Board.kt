@@ -13,7 +13,8 @@ open class Board {
     var unplacedOrangeBlocks = Vector<BoardPiece.TileBlock?>();
 
     var tiles = Array(SIZE*SIZE) {Tile.BRICKS};
-    val placedTopPieces = Vector<BoardPiece.Top>();
+    val placedTopPiecesByBlue = Vector<BoardPiece.Top>();
+    val placedTopPiecesByOrange = Vector<BoardPiece.Top>();
 
     var unpickedBuildings = Vector<BuildingName>();
     var blueInventoryBuildings = Vector<BuildingName>();
@@ -45,6 +46,59 @@ open class Board {
         tiles[index] = tile;
     }
 
+    private fun containsTilePos(tileX: Int, tileY: Int): Boolean {
+        return tileX in 0..<SIZE && tileY in 0..<SIZE;
+    }
+
+    fun doesTileBlockFit(tileBlock: BoardPiece.TileBlock): Boolean {
+        for (part in tileBlock.parts) {
+            // If any part is outside the board, it does not fit
+            if (!this.containsTilePos(part.x, part.y)) return false;
+            // If any part is on top of an already defined tile block, it does not fit
+            if (this.getTile(part.x, part.y) != Tile.BRICKS) return false;
+        }
+        return true;
+    }
+
+    private fun isTopPieceLayerEmptyAt(tileX: Int, tileY: Int): Boolean {
+        for (topPiece in this.placedTopPiecesByBlue) {
+            for (part in topPiece.parts) {
+                if (part.x == tileX && part.y == tileY) return false;
+            }
+        }
+        for (topPiece in this.placedTopPiecesByOrange) {
+            for (part in topPiece.parts) {
+                if (part.x == tileX && part.y == tileY) return false;
+            }
+        }
+        return true;
+    }
+
+    fun doesTopPieceFit(piece: BoardPiece.Top, owner: PlayerColor): Boolean {
+        // TODO: Add exception rules, e.g. effects of cards
+        when (piece) {
+            is BoardPiece.Top.Building -> {
+                val acceptedUnderlyingTiles = when (owner) {
+                    PlayerColor.BLUE -> listOf(Tile.BLUE, Tile.SHARED);
+                    PlayerColor.ORANGE -> listOf(Tile.ORANGE, Tile.SHARED);
+                }
+
+                for (part in piece.parts) {
+                    // Parts outside board means not fitting
+                    if (!this.containsTilePos(part.x, part.y)) return false;
+
+                    // Cannot fit piece here if tile is from opponent's color or lantern e.g.
+                    if (!acceptedUnderlyingTiles.contains(this.getTile(part.x, part.y))) return false;
+
+                    // Cannot fit piece if another piece exists here already
+                    if (!isTopPieceLayerEmptyAt(part.x, part.y)) return false;
+                }
+                return true;
+            }
+            is BoardPiece.Top.Decoration -> TODO()
+        }
+    }
+
     fun deepClone(): Board {
         val newBoard = Board();
 
@@ -63,6 +117,23 @@ open class Board {
 
         for (i in 0..<this.tiles.size) {
             newBoard.tiles[i] = this.tiles[i];
+        }
+
+        for (piece in this.placedTopPiecesByBlue) {
+            newBoard.placedTopPiecesByBlue.addElement(
+                when (piece) {
+                    is BoardPiece.Top.Building -> piece.clone()
+                    else -> TODO()
+                }
+            )
+        }
+        for (piece in this.placedTopPiecesByOrange) {
+            newBoard.placedTopPiecesByOrange.addElement(
+                when (piece) {
+                    is BoardPiece.Top.Building -> piece.clone();
+                    else -> TODO()
+                }
+            )
         }
 
         for (buildingName in this.unpickedBuildings) {
@@ -337,7 +408,7 @@ sealed class BoardPiece(var rotation: Direction, val parts: List<Vec2>) {
                     // And move its origin to the desired location
                     building.move(origin);
 
-                    return Building(name, parts, rotation);
+                    return building;
                 }
             }
         }
