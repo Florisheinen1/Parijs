@@ -331,7 +331,7 @@ enum class DecorationName {
             DANCER -> CardType.MOULIN_ROUGE;
             FOUNTAIN -> CardType.FONTAINE_DES_MERS;
             STATUE -> CardType.LE_PENSEUR;
-            BIG_LANTERN -> CardType.LAMPADAIRE;
+            BIG_LANTERN -> CardType.LA_GRANDE_LUMIERE;
         }
     }
 }

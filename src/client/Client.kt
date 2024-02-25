@@ -221,6 +221,7 @@ class Client(private val ui: UI) : Player {
                         // This card "Sacre Coeur", when claimed, is immediately "used / in effect".
                         this.board.updateCard(validatedMove.cardType, PlayerColor.BLUE, CardState.PICKED_AND_USED);
                     } else {
+                        // TODO: Verify this
                         // Other cards are only "claimed" to be used in later turns
                         this.board.updateCard(validatedMove.cardType, PlayerColor.BLUE, CardState.PICKED_BUT_UNUSED);
                     }

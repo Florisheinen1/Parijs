@@ -1472,21 +1472,6 @@ class BuildingCollection(private val buildingSelectionListener: BuildingSelectio
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 class ConnectDialog : JDialog() {
     var DEFAULT_ADDRESS = "127.0.0.1";
     var DEFAULT_PORT = "39939";
