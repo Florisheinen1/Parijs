@@ -66,12 +66,17 @@ class Gui : UI() {
     private val eventManager = object : GuiEventManager {
         private val listeners = Vector<GuiEventListener>();
         override fun emitEvent(event: GuiEvent) {
-            for (listener in this.listeners) {
-                listener.onEvent(event);
+            synchronized(this.listeners) {
+                for (listener in this.listeners) {
+                    // TODO: Fix multithreading
+                    listener.onEvent(event);
+                }
             }
         }
         override fun addEventListener(listener: GuiEventListener) {
-            this.listeners.add(listener);
+            synchronized(this.listeners) {
+                this.listeners.add(listener);
+            }
         }
     }
 
@@ -1022,7 +1027,7 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
         return neighbors;
     }
 
-    // ========== Drawing of board components ========== //
+    // ========== Painting of board components ========== //
     override fun paintComponent(g: Graphics?) {
         super.paintComponent(g)
         if (g == null) return;
@@ -1039,18 +1044,14 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
     private fun paintPlacedTopPieces(g: Graphics) {
         for (piece in this.board.placedTopPiecesByBlue) {
             when (piece) {
-                is Top.Building -> {
-                    paintBuilding(g, piece, true);
-                }
-                is Top.Decoration -> {
-                    paintDecoration(g, piece, true);
-                }
+                is Top.Building -> paintBuilding(g, piece, true, PlayerColor.BLUE);
+                is Top.Decoration -> paintDecoration(g, piece, true, PlayerColor.BLUE);
             }
         }
         for (piece in this.board.placedTopPiecesByOrange) {
             when (piece) {
-                is Top.Building -> paintBuilding(g, piece, true);
-                is Top.Decoration -> paintDecoration(g, piece, true);
+                is Top.Building -> paintBuilding(g, piece, true, PlayerColor.ORANGE);
+                is Top.Decoration -> paintDecoration(g, piece, true, PlayerColor.ORANGE);
             }
         }
     }
@@ -1064,7 +1065,7 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
                 val building = Top.Building.from(staged.buildingName, tilePos, staged.rotation);
                 val fits = this.board.doesTopPieceFit(building, PlayerColor.BLUE);
 
-                this.paintBuilding(g, building, fits);
+                this.paintBuilding(g, building, fits, null);
             }
             is StagedObject.StagedTileBlock -> {
                 // Do not draw over already placed tileBlocks
@@ -1080,13 +1081,13 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
                 val decoration = Top.Decoration.from(staged.name, tilePos, staged.rotation);
                 val fits = this.board.doesTopPieceFit(decoration, PlayerColor.BLUE);
 
-                this.paintDecoration(g, decoration, fits);
+                this.paintDecoration(g, decoration, fits, null);
             }
             StagedObject.None -> {}
         }
     }
 
-    private fun paintDecoration(g: Graphics, decoration: Top.Decoration, fits: Boolean) {
+    private fun paintDecoration(g: Graphics, decoration: Top.Decoration, fits: Boolean, owner: PlayerColor?) {
         val tileSize = this.width / this.board.SIZE;
 
         val targetColor = when (decoration.name) {
@@ -1117,10 +1118,47 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
 
             g.color = targetColor;
             g.fillRect(left, top, right - left, bottom - top);
+
+            if (owner != null) {
+                // Draw owner
+                val leftOwner = screenPos.x + 2*borderSize;
+                val topOwner = screenPos.y + 2*borderSize;
+                val rightOwner = screenPos.x + tileSize - 2*borderSize;
+                val bottomOwner = screenPos.y + tileSize - 2*borderSize;
+
+                g.color = Color.BLACK;
+                g.fillOval(leftOwner, topOwner, rightOwner - leftOwner, bottomOwner - topOwner);
+
+                g.color = when (owner) {
+                    PlayerColor.BLUE -> Color.BLUE;
+                    PlayerColor.ORANGE -> Color.ORANGE;
+                }
+                g.fillOval(leftOwner + 2, topOwner + 2, rightOwner - leftOwner - 4, bottomOwner - topOwner - 4);
+            }
+        }
+
+        // Draw on top the marker that indicates the rotation of this piece of decoration
+        if (decoration.name == DecorationName.STATUE || decoration.name == DecorationName.EXTENSION) {
+            val part = decoration.parts[0];
+            val screenPos = Vec2(part.x * tileSize, part.y * tileSize);
+
+            val left = screenPos.x + borderSize;
+            val top = screenPos.y + borderSize;
+            val right = screenPos.x + tileSize - borderSize;
+            val bottom = screenPos.y + tileSize - borderSize;
+
+            g.color = Color.WHITE;
+
+            when (decoration.rotation) {
+                Direction.NORTH -> g.fillRect(left, screenPos.y, right - left, borderSize);
+                Direction.EAST -> g.fillRect(right, top, borderSize, bottom - top);
+                Direction.SOUTH -> g.fillRect(left, bottom,right - left, borderSize);
+                Direction.WEST -> g.fillRect(screenPos.x, top, borderSize, bottom - top);
+            }
         }
     }
 
-    private fun paintBuilding(g: Graphics, building: Top.Building, allowed: Boolean) {
+    private fun paintBuilding(g: Graphics, building: Top.Building, allowed: Boolean, owner: PlayerColor?) {
         val borderSize = 5;
         val tileSize = this.width / this.board.SIZE;
 
@@ -1141,6 +1179,23 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
             // Draw inner building
             g.color = if (allowed) Color.GREEN else Color.RED;
             g.fillRect(left, top, right - left, bottom - top);
+
+            if (owner != null) {
+                // Draw owner
+                val leftOwner = screenPos.x + 2*borderSize;
+                val topOwner = screenPos.y + 2*borderSize;
+                val rightOwner = screenPos.x + tileSize - 2*borderSize;
+                val bottomOwner = screenPos.y + tileSize - 2*borderSize;
+
+                g.color = Color.BLACK;
+                g.fillOval(leftOwner, topOwner, rightOwner - leftOwner, bottomOwner - topOwner);
+
+                g.color = when (owner) {
+                    PlayerColor.BLUE -> Color.BLUE;
+                    PlayerColor.ORANGE -> Color.ORANGE;
+                }
+                g.fillOval(leftOwner + 2, topOwner + 2, rightOwner - leftOwner - 4, bottomOwner - topOwner - 4);
+            }
         }
     }
 

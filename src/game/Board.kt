@@ -1,5 +1,6 @@
 package game
 
+import client.GuiEvent
 import java.security.InvalidParameterException
 import java.util.Vector
 import kotlin.math.abs
@@ -130,6 +131,28 @@ open class Board {
                 }
 
                 // TODO: Add decoration specific checks
+                if (piece.name == DecorationName.EXTENSION) {
+                    // Then this piece can only be placed if it is facing a building of the owner
+                    val mainPart = piece.parts[0];
+                    val facingPosition = mainPart.getAdjacent(piece.rotation);
+
+                    val attachedTopPieces = if (owner == PlayerColor.BLUE) this.placedTopPiecesByBlue else this.placedTopPiecesByOrange;
+
+                    var canExtendBuilding = false;
+                    for (otherPiece in attachedTopPieces) {
+                        if (otherPiece is BoardPiece.Top.Building) {
+                            for (otherPart in otherPiece.parts) {
+                                if (otherPart.x == facingPosition.x && otherPart.y == facingPosition.x) {
+                                    canExtendBuilding = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (canExtendBuilding) break;
+                    }
+                    if (!canExtendBuilding) return false;
+                }
+
                 return true;
             }
         }
@@ -236,7 +259,7 @@ enum class Direction {
     }
 }
 
-class Vec2(var x: Int, var y: Int) {
+data class Vec2(var x: Int, var y: Int) {
     fun rotate(clockwise: Boolean) {
         if (clockwise) {
             val newX = this.y;
@@ -251,6 +274,12 @@ class Vec2(var x: Int, var y: Int) {
         }
     }
     fun clone(): Vec2 = Vec2(x, y);
+    fun getAdjacent(direction: Direction): Vec2 = when (direction) {
+        Direction.NORTH -> Vec2(this.x, this.y - 1);
+        Direction.EAST -> Vec2(this.x + 1, this.y);
+        Direction.SOUTH -> Vec2(this.x, this.y + 1);
+        Direction.WEST -> Vec2(this.x - 1, this.y);
+    }
 }
 
 enum class Tile {
