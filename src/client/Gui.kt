@@ -1525,14 +1525,7 @@ class ConnectDialog : JDialog() {
             override fun changedUpdate(e: DocumentEvent) { updateValue(e); }
 
             fun updateValue(e: DocumentEvent) {
-                val newAddr = e.document.getText(0, e.document.length);
-
-                if (serverAddress == null) {
-                    addressInput.background = Color(255, 200, 200);
-                } else {
-                    addressInput.background = Color(200, 255, 200);
-                }
-                submit.isEnabled = hasValidData();
+                serverAddress = e.document.getText(0, e.document.length);
             }
         })
 
@@ -1555,7 +1548,6 @@ class ConnectDialog : JDialog() {
                 } else {
                     portInput.background = Color(255, 200, 200);
                 }
-                submit.isEnabled = hasValidData();
             }
         })
 
