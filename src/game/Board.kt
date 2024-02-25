@@ -122,21 +122,12 @@ open class Board {
 
                 for (part in piece.parts) {
                     // If part is outside the board, we cant place it
-                    if (!this.containsTilePos(part.x, part.y)) {
-                        println("Part is outside of board: %d, %d".format(part.x, part.y));
-                        return false;
-                    }
+                    if (!this.containsTilePos(part.x, part.y)) return false;
 
                     val underlyingTile = this.getTile(part.x, part.y);
-                    if (!acceptedUnderlyingTiles.contains(underlyingTile)) {
-                        println("Part is on wrong tile: %s".format(underlyingTile.name));
-                        return false;
-                    }
+                    if (!acceptedUnderlyingTiles.contains(underlyingTile)) return false;
 
-                    if (!isTopPieceLayerEmptyAt(part.x, part.y)) {
-                        println("Part is on another board piece");
-                        return false;
-                    }
+                    if (!isTopPieceLayerEmptyAt(part.x, part.y)) return false;
                 }
 
                 if (piece.name == DecorationName.EXTENSION) {
@@ -158,10 +149,7 @@ open class Board {
                         }
                         if (canExtendBuilding) break;
                     }
-                    if (!canExtendBuilding) {
-                        println("Cannot extend building on %d, %d".format(facingPosition.x, facingPosition.y));
-                        return false;
-                    }
+                    if (!canExtendBuilding) return false;
                 }
 
                 return true;

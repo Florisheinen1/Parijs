@@ -228,51 +228,6 @@ class Gui : UI() {
             }
         }
     }
-
-//            /*
-//                NO_ACTION_TYPE -> Sacre Coeur, just dibs. No select
-//                SINGLE_ACTION_TYPE -> Jardin des plantes, select and place
-//                DUAL_ACTION_TYPE -> Metropolitan, dibs and place building later. No select!
-//                TRIPLE_ACTION_TYPE -> Select, select, select, place
-//             */
-//            is GuiEvent.ClickOn.ActionCard -> {
-//                TODO()
-//                when (click.cardType) {
-//                    // No action types: Just dibs
-//                    CardType.SACRE_COEUR -> {
-//                        when (click.cardOwner) {
-//                            PlayerColor.ORANGE -> {
-//                                println("Clicked on card of opponent. Cant do this!");
-//                                return;
-//                            }
-//                            PlayerColor.BLUE -> {
-//                                println("Already owned this card. Cant do this!");
-//                                return;
-//                            }
-//                            null -> {
-//                                println("Clicked unselected card.");
-//
-//                            }
-//                        }
-//                    }
-//
-//                    // Single action: Select and place.
-//                    CardType.LA_GRANDE_LUMIERE -> TODO()
-//                    CardType.LE_PENSEUR -> TODO()
-//                    CardType.FONTAINE_DES_MERS -> TODO()
-//                    CardType.MOULIN_ROUGE -> TODO()
-//                    CardType.JARDIN_DES_PLANTES -> TODO()
-//                    CardType.LE_PEINTRE -> TODO()
-//                    CardType.BOUQUINISTES_SUR_LA_SEINE -> TODO()
-//                    CardType.LAMPADAIRE -> TODO()
-//
-//                    // Dual action: Dibs, and use later
-//                    CardType.METROPOLITAN -> TODO() // Allow building over lantern
-//                    CardType.CHARTIER -> TODO() // Allow build on opponent color
-//
-//                    // Triple action: Select card, select own building, select unpicked building, click board
-//                    CardType.LEVITATION -> TODO()
-
     override fun getServerAddress(): Pair<InetAddress, Int> {
         val startDialog = ConnectDialog();
         startDialog.run();
@@ -566,7 +521,6 @@ class CardsCollection(eventManager: GuiEventManager) : JPanel() {
                         initializeCards(event.newBoard.inGameCards, eventManager);
                     }
                 }
-                // TODO: Handle card update events
             }
         })
     }
@@ -1101,7 +1055,7 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
             DecorationName.LANTERN -> Color(200, 200, 0);
             DecorationName.DANCER -> Color(255, 100, 100);
             DecorationName.FOUNTAIN -> Color(0, 50, 200);
-            DecorationName.STATUE -> Color(100, 100, 0);
+            DecorationName.STATUE -> Color(100, 100, 100);
             DecorationName.BIG_LANTERN -> Color(255, 255, 150);
         }
 
@@ -1565,11 +1519,6 @@ class ConnectDialog : JDialog() {
                 if (serverPort == null) serverPort = DEFAULT_PORT.toInt();
 
                 submitted = true;
-            }
-        })
-        this.addWindowListener(object : WindowAdapter() {
-            override fun windowClosing(e: WindowEvent?) {
-
             }
         })
 
