@@ -68,7 +68,6 @@ class Gui : UI() {
         override fun emitEvent(event: GuiEvent) {
             synchronized(this.listeners) {
                 for (listener in this.listeners) {
-                    // TODO: Fix multithreading
                     listener.onEvent(event);
                 }
             }
@@ -82,7 +81,6 @@ class Gui : UI() {
 
     private val window = GameWindow(eventManager);
     private var guiPhase: GuiPhase = INITIAL_GUI_PHASE;
-//    private var selectClick: GuiEvent? = null;
     private var stagedObject: StagedObject = StagedObject.None;
     private var board = Board();
 
@@ -278,8 +276,14 @@ class Gui : UI() {
     override fun getServerAddress(): Pair<InetAddress, Int> {
         val startDialog = ConnectDialog();
         startDialog.run();
-        while (!startDialog.submitted) Thread.sleep(100);
+        while (!startDialog.submitted && !startDialog.isManuallyClosed) Thread.sleep(100);
         startDialog.dispose();
+
+        if (startDialog.isManuallyClosed) {
+            println("User closed connection window");
+            System.exit(0);
+        }
+
         return Pair(startDialog.serverAddress!!, startDialog.serverPort!!);
     }
 
@@ -1536,6 +1540,16 @@ class ConnectDialog : JDialog() {
     var serverAddress: InetAddress? = null;
     var serverPort: Int? = null;
     var submitted = false;
+    var isManuallyClosed = false;
+
+    init {
+        this.addWindowListener(object : WindowAdapter() {
+            override fun windowClosing(e: WindowEvent?) {
+                super.windowClosing(e);
+                isManuallyClosed = true;
+            }
+        })
+    }
 
     fun run() {
         this.title = "Start Parijs";

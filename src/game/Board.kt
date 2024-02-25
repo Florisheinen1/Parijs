@@ -122,15 +122,23 @@ open class Board {
 
                 for (part in piece.parts) {
                     // If part is outside the board, we cant place it
-                    if (!this.containsTilePos(part.x, part.y)) return false;
+                    if (!this.containsTilePos(part.x, part.y)) {
+                        println("Part is outside of board: %d, %d".format(part.x, part.y));
+                        return false;
+                    }
 
                     val underlyingTile = this.getTile(part.x, part.y);
-                    if (!acceptedUnderlyingTiles.contains(underlyingTile)) return false;
+                    if (!acceptedUnderlyingTiles.contains(underlyingTile)) {
+                        println("Part is on wrong tile: %s".format(underlyingTile.name));
+                        return false;
+                    }
 
-                    if (!isTopPieceLayerEmptyAt(part.x, part.y)) return false;
+                    if (!isTopPieceLayerEmptyAt(part.x, part.y)) {
+                        println("Part is on another board piece");
+                        return false;
+                    }
                 }
 
-                // TODO: Add decoration specific checks
                 if (piece.name == DecorationName.EXTENSION) {
                     // Then this piece can only be placed if it is facing a building of the owner
                     val mainPart = piece.parts[0];
@@ -142,7 +150,7 @@ open class Board {
                     for (otherPiece in attachedTopPieces) {
                         if (otherPiece is BoardPiece.Top.Building) {
                             for (otherPart in otherPiece.parts) {
-                                if (otherPart.x == facingPosition.x && otherPart.y == facingPosition.x) {
+                                if (otherPart.x == facingPosition.x && otherPart.y == facingPosition.y) {
                                     canExtendBuilding = true;
                                     break;
                                 }
@@ -150,7 +158,10 @@ open class Board {
                         }
                         if (canExtendBuilding) break;
                     }
-                    if (!canExtendBuilding) return false;
+                    if (!canExtendBuilding) {
+                        println("Cannot extend building on %d, %d".format(facingPosition.x, facingPosition.y));
+                        return false;
+                    }
                 }
 
                 return true;

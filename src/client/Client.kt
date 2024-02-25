@@ -68,7 +68,6 @@ class Client(private val ui: UI) : Player {
                 serverHandler = ServerHandler(socket, this);
                 break;
             } catch (e: ConnectException) {
-                println("Failed to connect. Try again!");
             }
         }
 
