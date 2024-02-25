@@ -229,17 +229,27 @@ class Gui : UI() {
         }
     }
     override fun getServerAddress(): Pair<InetAddress, Int> {
-        val startDialog = ConnectDialog();
-        startDialog.run();
-        while (!startDialog.submitted && !startDialog.isManuallyClosed) Thread.sleep(100);
-        startDialog.dispose();
+        while (true) {
+            val startDialog = ConnectDialog();
+            startDialog.run();
+            while (!startDialog.submitted && !startDialog.isManuallyClosed) Thread.sleep(100);
+            startDialog.dispose();
 
-        if (startDialog.isManuallyClosed) {
-            println("User closed connection window");
-            System.exit(0);
+            if (startDialog.isManuallyClosed) {
+                println("User closed connection window");
+                System.exit(0);
+            }
+
+            try {
+                val actualAddress = InetAddress.getByName(startDialog.serverAddress);
+                val actualPort: Int =  startDialog.serverPort!!;
+                return Pair(actualAddress, actualPort);
+            } catch (e: BadLocationException) {
+                println("Incorrect server address. Please try again.");
+            } catch (e: UnknownHostException) {
+                println("Failed to connect to server. Please try again");
+            }
         }
-
-        return Pair(startDialog.serverAddress!!, startDialog.serverPort!!);
     }
 
     override fun updatePhase(newPhase: GuiPhase) {
@@ -1476,7 +1486,7 @@ class ConnectDialog : JDialog() {
     var DEFAULT_ADDRESS = "127.0.0.1";
     var DEFAULT_PORT = "39939";
 
-    var serverAddress: InetAddress? = null;
+    var serverAddress: String? = null;
     var serverPort: Int? = null;
     var submitted = false;
     var isManuallyClosed = false;
@@ -1500,7 +1510,7 @@ class ConnectDialog : JDialog() {
         val submit = JButton("Join server");
         submit.addActionListener(object : ActionListener {
             override fun actionPerformed(e: ActionEvent?) {
-                if (serverAddress == null) serverAddress = InetAddress.getByName(DEFAULT_ADDRESS);
+                if (serverAddress == null) serverAddress = DEFAULT_ADDRESS;
                 if (serverPort == null) serverPort = DEFAULT_PORT.toInt();
 
                 submitted = true;
@@ -1515,14 +1525,7 @@ class ConnectDialog : JDialog() {
             override fun changedUpdate(e: DocumentEvent) { updateValue(e); }
 
             fun updateValue(e: DocumentEvent) {
-                try {
-                    val newAddr = InetAddress.getByName(e.document.getText(0, e.document.length));
-                    serverAddress = newAddr;
-                } catch (e: BadLocationException) {
-                    serverAddress = null;
-                } catch (e: UnknownHostException) {
-                    serverAddress = null;
-                }
+                val newAddr = e.document.getText(0, e.document.length);
 
                 if (serverAddress == null) {
                     addressInput.background = Color(255, 200, 200);
