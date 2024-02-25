@@ -30,6 +30,12 @@ class Client(private val ui: UI) : Player {
                     is UserAction.PlaceBuilding -> {
                         println("Received place building event of %s on (%d, %d)".format(action.buildingName, action.position.x, action.position.y));
                     }
+                    is UserAction.ClaimCard -> {
+                        println("Noticed use card event: %s".format(action.cardType.name));
+                    }
+                    is UserAction.PlaceDecoration -> {
+                        println("Noticed place decoration: %s".format(action.decoration.name));
+                    }
                 }
             }
         });
@@ -177,6 +183,8 @@ class Client(private val ui: UI) : Player {
                 when (action) {
                     is UserAction.PlaceBuilding -> move = UserMove.PlaceBuilding(action.buildingName, action.position, action.rotation);
                     is UserAction.Pass -> move = UserMove.Pass;
+                    is UserAction.ClaimCard -> move = UserMove.ClaimCard(action.cardType);
+                    is UserAction.PlaceDecoration -> move = UserMove.PlaceDecoration(action.decoration.name, action.decoration.getOrigin(), action.decoration.rotation);
                     else -> {
                         println("Received unexpected move!");
                     }
@@ -208,8 +216,27 @@ class Client(private val ui: UI) : Player {
                 }
                 println("Performed placed building user action");
             }
-            is UserMove.CardAction -> {
-                println("Performing card action...");
+            is UserMove.ClaimCard -> {
+                synchronized(this.board) {
+                    if (validatedMove.cardType == CardType.SACRE_COEUR) {
+                        // This card "Sacre Coeur", when claimed, is immediately "used / in effect".
+                        this.board.updateCard(validatedMove.cardType, PlayerColor.BLUE, CardState.PICKED_AND_USED);
+                    } else {
+                        // Other cards are only "claimed" to be used in later turns
+                        this.board.updateCard(validatedMove.cardType, PlayerColor.BLUE, CardState.PICKED_BUT_UNUSED);
+                    }
+                    this.ui.updateGameState(this.board);
+                }
+                println("Performed claimCard action")
+            }
+            is UserMove.PlaceDecoration -> {
+                synchronized(this.board) {
+                    val placedDecoration = Top.Decoration.from(validatedMove.decorationName, validatedMove.position, validatedMove.rotation);
+
+                    this.board.placedTopPiecesByBlue.add(placedDecoration);
+                    this.board.updateCard(validatedMove.decorationName.toCardType(), PlayerColor.BLUE, CardState.PICKED_AND_USED);
+                    this.ui.updateGameState(this.board);
+                }
             }
             else -> println("Received phase 1 move while in phase 2");
         }
@@ -254,7 +281,24 @@ class Client(private val ui: UI) : Player {
                     this.ui.updateGameState(this.board);
                 }
             }
-            is UserMove.CardAction -> TODO()
+            is UserMove.ClaimCard -> {
+                println("Opponent claimed card: %s".format(move.cardType.name));
+                synchronized(this.board) {
+                    val newState = if (move.cardType == CardType.SACRE_COEUR) CardState.PICKED_AND_USED else CardState.UNPICKED_AND_UNUSED;
+                    this.board.updateCard(move.cardType, PlayerColor.ORANGE, newState);
+                    this.ui.updateGameState(this.board);
+                }
+            }
+            is UserMove.PlaceDecoration -> {
+                println("Opponent placed decoration: %s".format(move.decorationName.name));
+                val placedDecoration = Top.Decoration.from(move.decorationName, move.position, move.rotation);
+
+                synchronized(this.board) {
+                    this.board.placedTopPiecesByOrange.add(placedDecoration);
+                    this.board.updateCard(move.decorationName.toCardType(), PlayerColor.ORANGE, CardState.PICKED_AND_USED);
+                    this.ui.updateGameState(this.board);
+                }
+            }
         }
     }
 

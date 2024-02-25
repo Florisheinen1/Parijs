@@ -1,10 +1,7 @@
 package client
 
-import game.Board
-import game.BuildingName
+import game.*
 import game.BoardPiece.*
-import game.Direction
-import game.Vec2
 import java.net.InetAddress
 import java.util.*
 
@@ -41,12 +38,15 @@ abstract class UserActionListener {
 }
 
 sealed class UserAction {
-    // TODO: MErge this with UserMove?
+    // TODO: Merge this with UserMove?
     data object CloseWindow : UserAction();
     data class PickBuilding(var buildingName: BuildingName) : UserAction();
     data class PlaceTileBlock(var position: Vec2, val tileBlock: TileBlock) : UserAction();
     data class PlaceBuilding(val buildingName: BuildingName, var position: Vec2, val rotation: Direction) : UserAction();
     data object Pass : UserAction();
+
+    data class PlaceDecoration(val decoration: Top.Decoration) : UserAction();
+    data class ClaimCard(val cardType: CardType) : UserAction();
 }
 
 sealed class GuiPhase { // Rename to UIPhase

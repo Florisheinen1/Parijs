@@ -50,6 +50,16 @@ open class Board {
         return tileX in 0..<SIZE && tileY in 0..<SIZE;
     }
 
+    fun updateCard(cardType: CardType, owner: PlayerColor, newCardState: CardState) {
+        for (card in this.inGameCards) {
+            if (card.type == cardType) {
+                card.state = newCardState;
+                card.owner = owner;
+                break;
+            }
+        }
+    }
+
     fun doesTileBlockFit(tileBlock: BoardPiece.TileBlock): Boolean {
         for (part in tileBlock.parts) {
             // If any part is outside the board, it does not fit
@@ -95,7 +105,33 @@ open class Board {
                 }
                 return true;
             }
-            is BoardPiece.Top.Decoration -> TODO()
+            is BoardPiece.Top.Decoration -> {
+                val ownTileColor = if (owner == PlayerColor.BLUE) Tile.BLUE else Tile.ORANGE;
+
+                val acceptedUnderlyingTiles = when (piece.name) {
+                    DecorationName.GARDEN -> listOf(ownTileColor, Tile.SHARED);
+                    DecorationName.PAINTER -> listOf(ownTileColor);
+                    DecorationName.EXTENSION -> listOf(ownTileColor);
+                    DecorationName.LANTERN -> listOf(ownTileColor);
+                    DecorationName.DANCER -> listOf(ownTileColor);
+                    DecorationName.FOUNTAIN -> listOf(ownTileColor, Tile.SHARED);
+                    DecorationName.STATUE -> listOf(ownTileColor);
+                    DecorationName.BIG_LANTERN -> listOf(Tile.LANTERN);
+                }
+
+                for (part in piece.parts) {
+                    // If part is outside the board, we cant place it
+                    if (!this.containsTilePos(part.x, part.y)) return false;
+
+                    val underlyingTile = this.getTile(part.x, part.y);
+                    if (!acceptedUnderlyingTiles.contains(underlyingTile)) return false;
+
+                    if (!isTopPieceLayerEmptyAt(part.x, part.y)) return false;
+                }
+
+                // TODO: Add decoration specific checks
+                return true;
+            }
         }
     }
 
@@ -123,7 +159,7 @@ open class Board {
             newBoard.placedTopPiecesByBlue.addElement(
                 when (piece) {
                     is BoardPiece.Top.Building -> piece.clone()
-                    else -> TODO()
+                    is BoardPiece.Top.Decoration -> piece.clone()
                 }
             )
         }
@@ -131,7 +167,7 @@ open class Board {
             newBoard.placedTopPiecesByOrange.addElement(
                 when (piece) {
                     is BoardPiece.Top.Building -> piece.clone();
-                    else -> TODO()
+                    is BoardPiece.Top.Decoration -> piece.clone();
                 }
             )
         }
@@ -151,18 +187,18 @@ open class Board {
 }
 
 enum class CardType {
-    LEVITATION,
-    METROPOLITAN,
-    JARDIN_DES_PLANTES,
-    SACRE_COEUR,
-    LE_PEINTRE,
-    CHARTIER,
-    BOUQUINISTES_SUR_LA_SEINE,
-    LAMPADAIRE,
-    MOULIN_ROUGE,
-    FONTAINE_DES_MERS,
-    LE_PENSEUR,
-    LA_GRANDE_LUMIERE,
+    LEVITATION, // Swap picked building with unpicked building and replace
+    METROPOLITAN, // Allow building be placed over lantern tile
+    JARDIN_DES_PLANTES, // Place garden
+    SACRE_COEUR, // No discount on leftover buildings
+    LE_PEINTRE, // Place painter
+    CHARTIER,   // Place shared tile on opponents tile
+    BOUQUINISTES_SUR_LA_SEINE, // Add extension to building
+    LAMPADAIRE, // Place lantern on street tile
+    MOULIN_ROUGE, // Place dancer
+    FONTAINE_DES_MERS, // Place fountain
+    LE_PENSEUR, // Place statue on street tile
+    LA_GRANDE_LUMIERE, // Increase reach of existing lantern
 }
 enum class CardState {
     UNPICKED_AND_UNUSED,
@@ -246,6 +282,30 @@ enum class BuildingName {
     CROSS,
     LINE,
     CHONK,
+}
+
+enum class DecorationName {
+    GARDEN,
+    PAINTER,
+    EXTENSION,
+    LANTERN,
+    DANCER,
+    FOUNTAIN,
+    STATUE,
+    BIG_LANTERN;
+
+    fun toCardType(): CardType {
+        return when (this) {
+            GARDEN -> CardType.JARDIN_DES_PLANTES;
+            PAINTER -> CardType.LE_PEINTRE;
+            EXTENSION -> CardType.BOUQUINISTES_SUR_LA_SEINE;
+            LANTERN -> CardType.LAMPADAIRE;
+            DANCER -> CardType.MOULIN_ROUGE;
+            FOUNTAIN -> CardType.FONTAINE_DES_MERS;
+            STATUE -> CardType.LE_PENSEUR;
+            BIG_LANTERN -> CardType.LAMPADAIRE;
+        }
+    }
 }
 
 sealed class BoardPiece(var rotation: Direction, val parts: List<Vec2>) {
@@ -349,15 +409,50 @@ sealed class BoardPiece(var rotation: Direction, val parts: List<Vec2>) {
 
     sealed class Top(rotation: Direction, parts: List<Vec2>) : BoardPiece(rotation, parts) {
 
-        sealed class Decoration(parts: List<Vec2>) : Top(Direction.NORTH, parts) {
-            data object Painter : Decoration(listOf(Vec2(0, 0)));
-            data object Dancer : Decoration(listOf(Vec2(0, 0)));
-            data object Fountain : Decoration(listOf(Vec2(0, 0), Vec2(1, 0)));
-            data object Statue : Decoration(listOf(Vec2(0, 0)));
-            data object Lantern : Decoration(listOf(Vec2(0, 0)));
-            data object BigLantern : Decoration(listOf(Vec2(0, 0)));
-            data object Garden : Decoration(listOf(Vec2(0, 0), Vec2(0, 0)));
-            data object Extension : Decoration(listOf(Vec2(0, 0)));
+        class Decoration(val name: DecorationName, parts: List<Vec2>, rotation: Direction) : Top(rotation, parts) {
+            fun clone(): Decoration {
+                val newName = this.name;
+                val newParts = Vector<Vec2>();
+                for (part in this.parts) {
+                    newParts.addElement(part.clone());
+                }
+                val newRotation = this.rotation;
+                return Decoration(newName, newParts, newRotation);
+            }
+
+            companion object {
+                fun from(name: DecorationName, origin: Vec2, rotation: Direction): Decoration {
+                    val exampleParts = when (name) {
+                        DecorationName.GARDEN -> listOf(Vec2(0, 0), Vec2(1, 0));
+                        DecorationName.PAINTER -> listOf(Vec2(0, 0));
+                        DecorationName.EXTENSION -> listOf(Vec2(0, 0));
+                        DecorationName.LANTERN -> listOf(Vec2(0, 0));
+                        DecorationName.DANCER -> listOf(Vec2(0, 0));
+                        DecorationName.FOUNTAIN -> listOf(Vec2(0, 0), Vec2(1, 0));
+                        DecorationName.STATUE -> listOf(Vec2(0, 0));
+                        DecorationName.BIG_LANTERN -> listOf(Vec2(0, 0));
+                    }
+                    val parts = Vector<Vec2>();
+                    for (part in exampleParts) {
+                        parts.add(part.clone());
+                    }
+                    val decoration = Decoration(name, parts, Direction.NORTH);
+
+                    when (rotation) {
+                        Direction.NORTH -> {} // Element already faces north
+                        Direction.EAST -> decoration.rotateParts(true);
+                        Direction.SOUTH -> {
+                            decoration.rotateParts(true);
+                            decoration.rotateParts(true);
+                        }
+
+                        Direction.WEST -> decoration.rotateParts(false);
+                    }
+                    decoration.normalizeParts();
+                    decoration.move(origin);
+                    return decoration;
+                }
+            }
         }
 
         class Building(val name: BuildingName, parts: List<Vec2>, rotation: Direction) : Top(rotation, parts) {
@@ -418,33 +513,3 @@ sealed class BoardPiece(var rotation: Direction, val parts: List<Vec2>) {
         }
     }
 }
-
-//// A square block that consists of 4 tiles
-//// Class to resemble anything that can be placed on the board
-//abstract class Placeable(var direction: Direction = Direction.NORTH, var parts: Array<Vec2>) {
-//    open fun rotate(clockwise: Boolean) {
-//        this.direction = this.direction.rotate(clockwise);
-//        for (part in this.parts) {
-//            part.rotate(clockwise);
-//        }
-//    }
-//
-//    fun getDimension(): Vec2 {
-//        var minX = this.parts[0].x;
-//        var minY = this.parts[0].y;
-//        var maxX = minX;
-//        var maxY = minY;
-//        for (part in this.parts) {
-//            if (part.x < minX) minX = part.x;
-//            if (part.x > maxX) maxX = part.x;
-//            if (part.y < minY) minY = part.y;
-//            if (part.y > maxY) maxY = part.y;
-//        }
-//        return Vec2(
-//            abs(maxX - minX) + 1,
-//            abs(maxY - minY) + 1,
-//        )
-//    }
-//}
-
-

@@ -1,5 +1,6 @@
 package game
 
+import client.GuiEvent
 import java.util.*
 import game.BoardPiece.*
 
@@ -15,7 +16,21 @@ class Game(val player1: Player, val player2: Player) {
     }
 
     private fun selectCardsForGame(): Vector<Card> {
-        val allCardTypes = CardType.entries;
+//        val allCardTypes = CardType.entries;
+        val allCardTypes = listOf(
+//            CardType.LEVITATION, // Swap picked building with unpicked building and replace
+//            CardType.METROPOLITAN, // Allow building be placed over lantern tile
+            CardType.JARDIN_DES_PLANTES, // Place garden
+            CardType.SACRE_COEUR, // No discount on leftover buildings
+            CardType.LE_PEINTRE, // Place painter
+//            CardType.CHARTIER,   // Place shared tile on opponents tile
+            CardType.BOUQUINISTES_SUR_LA_SEINE, // Add extension to building
+            CardType.LAMPADAIRE, // Place lantern on street tile
+            CardType.MOULIN_ROUGE, // Place dancer
+            CardType.FONTAINE_DES_MERS, // Place fountain
+            CardType.LE_PENSEUR, // Place statue on street tile
+            CardType.LA_GRANDE_LUMIERE, // Increase reach of existing lantern
+        )
         val selectedCardTypes = allCardTypes.shuffled().take(8);
         val selectedCards = selectedCardTypes.map { Card(it, CardState.UNPICKED_AND_UNUSED) }
         return Vector(selectedCards);
@@ -177,7 +192,23 @@ class Game(val player1: Player, val player2: Player) {
 
                 println("Placed building on board: %s".format(move.buildingName.name));
             }
-            is UserMove.CardAction -> TODO()
+            is UserMove.ClaimCard -> {
+                val newState = if (move.cardType == CardType.SACRE_COEUR) CardState.PICKED_AND_USED else CardState.PICKED_BUT_UNUSED;
+                this.board.updateCard(move.cardType, playerColor, newState);
+                println("Claimed card: %s".format(move.cardType.name));
+            }
+            is UserMove.PlaceDecoration -> {
+                val placedDecoration = Top.Decoration.from(move.decorationName, move.position, move.rotation);
+
+                val targetList = when (playerColor) {
+                    PlayerColor.BLUE -> this.board.placedTopPiecesByBlue;
+                    PlayerColor.ORANGE -> this.board.placedTopPiecesByOrange;
+                }
+
+                targetList.addElement(placedDecoration);
+                this.board.updateCard(move.decorationName.toCardType(), playerColor, CardState.PICKED_AND_USED);
+                println("Built decoration: %s".format(move.decorationName.name));
+            }
         }
     }
 

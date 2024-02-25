@@ -13,6 +13,7 @@ import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import javax.swing.text.BadLocationException
 import kotlin.math.abs
+import kotlin.math.min
 
 val INITIAL_GUI_PHASE = GuiPhase.Connecting;
 
@@ -39,6 +40,7 @@ sealed class GuiEvent {
         sealed class Stage : BuildStage() {
             data class UnplacedTileBlock(val tileBlock: TileBlock) : Stage();
             data class Building(val buildingName: BuildingName) : Stage();
+            data class Decoration(val decorationName: DecorationName) : Stage();
         }
 
         data object Clear : BuildStage();
@@ -137,8 +139,17 @@ class Gui : UI() {
 
                             if (this.board.doesTileBlockFit(supposedTileBlock)) {
                                 this.onUserAction(UserAction.PlaceTileBlock(position, stagedTileBlock));
-                            } else {
-                                println("Cannot place new tileblock at %d, %d".format(position.x, position.y));
+                            }
+                        }
+                        is StagedObject.StagedDecoration -> {
+                            val staged = this.stagedObject as StagedObject.StagedDecoration;
+
+                            // Decoration can only be staged if allowed now
+                            val position = Vec2(event.tileX, event.tileY);
+                            val supposedPlacedDecoration = Top.Decoration.from(staged.name, position, staged.rotation);
+
+                            if (this.board.doesTopPieceFit(supposedPlacedDecoration, PlayerColor.BLUE)) {
+                                this.onUserAction(UserAction.PlaceDecoration(supposedPlacedDecoration));
                             }
                         }
                     }
@@ -158,7 +169,6 @@ class Gui : UI() {
                 }
 
                 is GuiEvent.ClickOn.PassButton -> {
-                    // Only works when we have the turn
                     val hasTurn = when (this.guiPhase) {
                         is GuiPhase.GamePhase1 -> (this.guiPhase as GuiPhase.GamePhase1).hasTurn;
                         is GuiPhase.GamePhase2 -> (this.guiPhase as GuiPhase.GamePhase2).hasTurn;
@@ -169,7 +179,30 @@ class Gui : UI() {
                     }
                 }
 
-                is GuiEvent.ClickOn.ActionCard -> TODO()
+                is GuiEvent.ClickOn.ActionCard -> {
+                    val hasTurn = this.guiPhase is GuiPhase.GamePhase2 && (this.guiPhase as GuiPhase.GamePhase2).hasTurn;
+                    if (!hasTurn) {
+                        println("Cannot perform card action when you do not have the turn in phase 2");
+                        return;
+                    }
+
+                    if (event.cardOwner != null) {
+                        println("Cannot click this card because it is already owned");
+                        return;
+                    }
+
+                    when (event.cardType) {
+                        CardType.JARDIN_DES_PLANTES -> eventManager.emitEvent(GuiEvent.BuildStage.Stage.Decoration(DecorationName.GARDEN));
+                        CardType.LE_PEINTRE -> eventManager.emitEvent(GuiEvent.BuildStage.Stage.Decoration(DecorationName.PAINTER));
+                        CardType.MOULIN_ROUGE -> eventManager.emitEvent(GuiEvent.BuildStage.Stage.Decoration(DecorationName.DANCER));
+                        CardType.LAMPADAIRE -> eventManager.emitEvent(GuiEvent.BuildStage.Stage.Decoration(DecorationName.LANTERN));
+                        CardType.LE_PENSEUR -> eventManager.emitEvent(GuiEvent.BuildStage.Stage.Decoration(DecorationName.STATUE));
+                        CardType.LA_GRANDE_LUMIERE -> eventManager.emitEvent(GuiEvent.BuildStage.Stage.Decoration(DecorationName.BIG_LANTERN));
+                        CardType.FONTAINE_DES_MERS -> eventManager.emitEvent(GuiEvent.BuildStage.Stage.Decoration(DecorationName.FOUNTAIN));
+                        CardType.BOUQUINISTES_SUR_LA_SEINE -> eventManager.emitEvent(GuiEvent.BuildStage.Stage.Decoration(DecorationName.EXTENSION));
+                        else -> onUserAction(UserAction.ClaimCard(event.cardType));
+                    }
+                }
                 is GuiEvent.ClickOn.ClearStage -> this.eventManager.emitEvent(GuiEvent.BuildStage.Clear);
                 is GuiEvent.ClickOn.RotateStage -> this.eventManager.emitEvent(GuiEvent.BuildStage.Rotate);
             }
@@ -179,6 +212,7 @@ class Gui : UI() {
                 is GuiEvent.BuildStage.Stage.Building -> {}
                 is GuiEvent.BuildStage.Stage.UnplacedTileBlock -> {}
                 is GuiEvent.BuildStage.Updated -> this.stagedObject = event.stagedObject;
+                is GuiEvent.BuildStage.Stage.Decoration -> {}
             }
             is GuiEvent.UpdateBoard -> this.board = event.newBoard;
             is GuiEvent.UpdateGuiPhase -> {
@@ -308,6 +342,7 @@ sealed class StagedObject() {
     data object None : StagedObject();
     data class StagedBuilding(val buildingName: BuildingName, val rotation: Direction) : StagedObject();
     data class StagedTileBlock(val tileBlock: TileBlock, val screenTileBlock: ScreenTileBlock) : StagedObject();
+    data class StagedDecoration(val name: DecorationName, val rotation: Direction) : StagedObject();
 }
 
 class BuildStage(private val eventManager: GuiEventManager) : JPanel() {
@@ -336,6 +371,7 @@ class BuildStage(private val eventManager: GuiEventManager) : JPanel() {
                         is GuiEvent.BuildStage.Stage.Building -> stageBuilding(event.buildingName, Direction.NORTH);
                         is GuiEvent.BuildStage.Stage.UnplacedTileBlock -> stageTileBlock(event.tileBlock);
                         is GuiEvent.BuildStage.Updated -> {}
+                        is GuiEvent.BuildStage.Stage.Decoration -> stageDecoration(event.decorationName, Direction.NORTH);
                     }
                     is GuiEvent.UpdateBoard -> clearStage();
                     else -> {}
@@ -357,12 +393,22 @@ class BuildStage(private val eventManager: GuiEventManager) : JPanel() {
                 newTileBlock.rotate(true);
                 stageTileBlock(newTileBlock);
             }
+            is StagedObject.StagedDecoration -> {
+                val newRotation = currentStaged.rotation.getRotated(true);
+                this.stageDecoration(currentStaged.name, newRotation);
+            }
         }
     }
 
     // Clears the stage
     private fun clearStage() {
         this.stageObject(StagedObject.None, JPanel());
+    }
+
+    private fun stageDecoration(name: DecorationName, rotation: Direction) {
+        val screenDecoration = ScreenDecoration(name, rotation);
+        val stageObject = StagedObject.StagedDecoration(name, rotation);
+        this.stageObject(stageObject, screenDecoration);
     }
 
     // Stages the given building
@@ -444,6 +490,21 @@ class ScreenCard(private val cardType: CardType, eventManager: GuiEventManager) 
                 eventManager.emitEvent(GuiEvent.ClickOn.ActionCard(cardType, cardState, cardOwner))
             }
         });
+
+        eventManager.addEventListener(object : GuiEventListener {
+            override fun onEvent(event: GuiEvent) {
+                if (event is GuiEvent.UpdateBoard) {
+                    for (card in event.newBoard.inGameCards) {
+                        if (card.type == cardType) {
+                            // This is our card! Set out state to whatever we find here
+                            cardState = card.state;
+                            cardOwner = card.owner;
+                            repaint();
+                        }
+                    }
+                }
+            }
+        })
     }
 
     override fun paintComponent(g: Graphics?) {
@@ -937,6 +998,30 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
         );
     }
 
+    private fun getTileAt(column: Int, row: Int): Tile {
+        return this.board.getTile(column, row);
+    }
+
+    // Lists all directions from given part that directly encounter a neighboring part
+    private fun getNeighborsOfPart(part: Vec2, parts: List<Vec2>): Vector<Direction> {
+        val neighbors = Vector<Direction>();
+        for (other in parts) {
+            if (other.x == part.x && other.y == part.y) continue;
+
+            val diffX = other.x - part.x;
+            val diffY = other.y - part.y;
+            if (abs(diffX) + abs(diffY) == 1) {
+                // This is a neighbor!
+                if (diffX == -1) neighbors.add(Direction.WEST);
+                else if (diffX == 1) neighbors.add(Direction.EAST);
+                else if (diffY == 1) neighbors.add(Direction.SOUTH);
+                else if (diffY == -1) neighbors.add(Direction.NORTH);
+            }
+        }
+
+        return neighbors;
+    }
+
     // ========== Drawing of board components ========== //
     override fun paintComponent(g: Graphics?) {
         super.paintComponent(g)
@@ -957,13 +1042,15 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
                 is Top.Building -> {
                     paintBuilding(g, piece, true);
                 }
-                else -> TODO()
+                is Top.Decoration -> {
+                    paintDecoration(g, piece, true);
+                }
             }
         }
         for (piece in this.board.placedTopPiecesByOrange) {
             when (piece) {
                 is Top.Building -> paintBuilding(g, piece, true);
-                else -> TODO()
+                is Top.Decoration -> paintDecoration(g, piece, true);
             }
         }
     }
@@ -986,9 +1073,50 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
 
                 val tileBlock = (this.stagedObject as StagedObject.StagedTileBlock).tileBlock;
                 val tileBlockPos = this.getTileBlockPosition(tilePos.x, tilePos.y);
-                this.drawTileBlock(g, tileBlock, tileBlockPos);
+                this.paintTileBlock(g, tileBlock, tileBlockPos);
             }
-            else -> {}
+            is StagedObject.StagedDecoration -> {
+                val staged = this.stagedObject as StagedObject.StagedDecoration;
+                val decoration = Top.Decoration.from(staged.name, tilePos, staged.rotation);
+                val fits = this.board.doesTopPieceFit(decoration, PlayerColor.BLUE);
+
+                this.paintDecoration(g, decoration, fits);
+            }
+            StagedObject.None -> {}
+        }
+    }
+
+    private fun paintDecoration(g: Graphics, decoration: Top.Decoration, fits: Boolean) {
+        val tileSize = this.width / this.board.SIZE;
+
+        val targetColor = when (decoration.name) {
+            DecorationName.GARDEN -> Color(0, 100, 0);
+            DecorationName.PAINTER -> Color(50, 0, 0);
+            DecorationName.EXTENSION -> Color(100, 60, 60);
+            DecorationName.LANTERN -> Color(200, 200, 0);
+            DecorationName.DANCER -> Color(255, 100, 100);
+            DecorationName.FOUNTAIN -> Color(0, 50, 200);
+            DecorationName.STATUE -> Color(100, 100, 0);
+            DecorationName.BIG_LANTERN -> Color(255, 255, 150);
+        }
+
+        val borderSize = 5;
+
+        for (part in decoration.parts) {
+            val neighbors = this.getNeighborsOfPart(part, decoration.parts.toList());
+
+            val screenPos = Vec2(part.x * tileSize, part.y * tileSize);
+
+            val left = screenPos.x + if (neighbors.contains(Direction.WEST)) 0 else borderSize;
+            val top = screenPos.y + if (neighbors.contains(Direction.NORTH)) 0 else borderSize;
+            val right = screenPos.x + tileSize - if (neighbors.contains(Direction.EAST)) 0 else borderSize;
+            val bottom = screenPos.y + tileSize - if (neighbors.contains(Direction.SOUTH)) 0 else borderSize;
+
+            g.color = if (fits) Color.BLACK else Color.RED;
+            g.fillRect(screenPos.x, screenPos.y, tileSize, tileSize);
+
+            g.color = targetColor;
+            g.fillRect(left, top, right - left, bottom - top);
         }
     }
 
@@ -1016,27 +1144,7 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
         }
     }
 
-    // Lists all directions from given part that directly encounter a neighboring part
-    private fun getNeighborsOfPart(part: Vec2, parts: List<Vec2>): Vector<Direction> {
-        val neighbors = Vector<Direction>();
-        for (other in parts) {
-            if (other.x == part.x && other.y == part.y) continue;
-
-            val diffX = other.x - part.x;
-            val diffY = other.y - part.y;
-            if (abs(diffX) + abs(diffY) == 1) {
-                // This is a neighbor!
-                if (diffX == -1) neighbors.add(Direction.WEST);
-                else if (diffX == 1) neighbors.add(Direction.EAST);
-                else if (diffY == 1) neighbors.add(Direction.SOUTH);
-                else if (diffY == -1) neighbors.add(Direction.NORTH);
-            }
-        }
-
-        return neighbors;
-    }
-
-    private fun drawTileBlock(g: Graphics, tileBlock: TileBlock, blockPos: Vec2) {
+    private fun paintTileBlock(g: Graphics, tileBlock: TileBlock, blockPos: Vec2) {
         val tileSize = this.width / this.board.SIZE;
         val topLeftRect = Rectangle(
                 blockPos.x * tileSize,
@@ -1099,9 +1207,6 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
             }
         }
     }
-    private fun getTileAt(column: Int, row: Int): Tile {
-        return this.board.tiles[row * this.board.SIZE + column];
-    }
     private fun paintTile(g: Graphics, rect: Rectangle, tileType: Tile) {
         when (tileType) {
             Tile.BLUE -> {
@@ -1143,108 +1248,16 @@ class ManualBoard(eventManager: GuiEventManager) : JComponent(), GuiEventListene
     }
 }
 
-class ScreenBoardTileLayer(eventManager: GuiEventManager) : JPanel() {
-    private val BLOCK_COLS = 4;
-    private val BLOCK_ROWS = 4;
-
-    init {
-        this.layout = GridLayout(BLOCK_ROWS, BLOCK_COLS, 0, 0);
-        for (row in 0..<BLOCK_ROWS) {
-            for (column in 0..<BLOCK_COLS) {
-                val tileBlock = this.createScreenTileBlock(column, row, eventManager);
-                this.add(tileBlock);
-            }
-        }
-    }
-
-    private fun createScreenTileBlock(blockColumn: Int, blockRow: Int, eventManager: GuiEventManager): ScreenTileBlock {
-        val tileBlock = ScreenTileBlock();
-
-        val blockEventListener = object : TileBlockMouseListener, GuiEventListener {
-            // Keep track of staged object
-            var stagedObject: StagedObject = StagedObject.None;
-
-            // And keep track of the original - according to the board - tiles of this block
-            var originalTileBlock = tileBlock.getDisplayedTileBlock();
-            // Can be temporarily replaced because we might display the suggested new TileBlock here.
-            var isReplaced = false;
-
-            override fun onEvent(event: GuiEvent) {
-                when (event) {
-                    is GuiEvent.BuildStage.Updated -> {
-                        stagedObject = event.stagedObject;
-                        if (stagedObject is StagedObject.StagedTileBlock) {
-                            cursor = if (originalTileBlock.isBricks()) {
-                                Cursor(Cursor.HAND_CURSOR);
-                            } else {
-                                Cursor.getSystemCustomCursor("Invalid.32x32");
-                            }
-                        }
-                    }
-                    is GuiEvent.UpdateBoard -> {
-                        val tileOrigin = Vec2(blockColumn * 2, blockRow * 2);
-                        val newTileBlock = TileBlock(
-                                Direction.NORTH,
-                                event.newBoard.getTile(tileOrigin.x, tileOrigin.y),
-                                event.newBoard.getTile(tileOrigin.x+1, tileOrigin.y),
-                                event.newBoard.getTile(tileOrigin.x, tileOrigin.y+1),
-                                event.newBoard.getTile(tileOrigin.x+1, tileOrigin.y+1),
-                        );
-                        originalTileBlock = newTileBlock;
-                        tileBlock.updateTiles(newTileBlock);
-                    }
-                    else -> {}
-                }
-            }
-            override fun onSelectedTile(tileBlock: TileBlock, relTileX: Int, relTileY: Int) {
-                eventManager.emitEvent(GuiEvent.ClickOn.Board(blockColumn*2 + relTileX, blockRow*2 + relTileY))
-            }
-            override fun onAbsoluteMouseEnter(e: MouseEvent) {
-                when (stagedObject) {
-                    is StagedObject.None -> {}
-                    is StagedObject.StagedBuilding -> {
-
-                    }
-                    is StagedObject.StagedTileBlock -> {
-                        val temporaryTiles = (stagedObject as StagedObject.StagedTileBlock).tileBlock.clone();
-                        tileBlock.updateTiles(temporaryTiles);
-                        isReplaced = true;
-                    }
-                }
-            }
-
-            override fun onAbsoluteMouseExit(e: MouseEvent) {
-                if (isReplaced) {
-                    tileBlock.updateTiles(originalTileBlock);
-                    isReplaced = false;
-                }
-            }
-        }
-        tileBlock.addTileBlockMouseListener(blockEventListener);
-        eventManager.addEventListener(blockEventListener);
-        return tileBlock;
-    }
-
+class ScreenDecoration(val decorationName: DecorationName, val rotation: Direction) : JComponent() {
     override fun paintComponent(g: Graphics?) {
-        super.paintComponent(g);
+        super.paintComponent(g)
         if (g == null) return;
-        g.color = Color.RED;
-        g.fillRect(0, 0, width, height);
-    }
-}
 
-class ScreenBoardBuildingLayer : JPanel() {
-    init {
-//        this.setBounds(50, 50, width/2, height/2);
-        this.isOpaque = false;
-    }
-
-    override fun paint(g: Graphics?) {
-//        super.paintComponent(g)
-        if (g == null) return;
-        println("Painting building layer: %d, %d".format(width, height));
-        g.color = Color.BLUE;
+        g.color = Color(127, 50, 0);
         g.fillRect(0, 0, width, height);
+
+        g.color = Color.BLACK;
+        g.drawString(decorationName.name, 10, height/2);
     }
 }
 

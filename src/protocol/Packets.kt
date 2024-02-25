@@ -88,7 +88,8 @@ sealed class Packet {
             is UserMove.PlaceBlockAt -> "PLACE_BLOCK" + DELIMITER + vecToString(move.position) + DELIMITER + tileBlockToString(move.tileBlock);
 
             is UserMove.PlaceBuilding -> "PLACE_BUILDING" + DELIMITER + move.buildingName.name + DELIMITER + vecToString(move.position) + DELIMITER + move.rotation.name;
-            is UserMove.CardAction -> TODO();
+            is UserMove.ClaimCard -> "CLAIM_CARD" + DELIMITER + move.cardType.name;
+            is UserMove.PlaceDecoration -> "PLACE_DECORATION" + DELIMITER + move.decorationName.name + DELIMITER + vecToString(move.position) + DELIMITER + move.rotation.name;
         }
     }
 
@@ -154,6 +155,9 @@ class Parser {
             "PLACE_BLOCK" -> UserMove.PlaceBlockAt(vecFromString(delimited[1]), tileBlockFromString(delimited[2])!!)
 
             "PLACE_BUILDING" -> UserMove.PlaceBuilding(BuildingName.valueOf(delimited[1]), vecFromString(delimited[2]), Direction.valueOf(delimited[3]));
+            "CLAIM_CARD" -> UserMove.ClaimCard(CardType.valueOf(delimited[1]));
+            "PLACE_DECORATION" -> UserMove.PlaceDecoration(DecorationName.valueOf(delimited[1]), vecFromString(delimited[2]), Direction.valueOf(delimited[3]));
+
             else -> throw ParseException("Failed to parse: '%s'.".format(s), 0);
         }
     }

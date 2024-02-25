@@ -30,17 +30,19 @@ sealed class UserMove {
     data class PlaceBlockAt(val position: Vec2, val tileBlock: TileBlock): UserMove();
     // Phase 2
     data class PlaceBuilding(val buildingName: BuildingName, val position: Vec2, val rotation: Direction) : UserMove();
-    sealed class CardAction : UserMove() {
-        data object claimSacreCoeur : CardAction();
-    }
+
+    data class ClaimCard(val cardType: CardType) : UserMove();
+    data class PlaceDecoration(val decorationName: DecorationName, val position: Vec2, val rotation: Direction) : UserMove();
 
     fun clone(): UserMove {
+        // TODO: Merge this with user action
         return when (this) {
             is Pass -> Pass;
             is PickBuilding -> PickBuilding(this.buildingName);
             is PlaceBlockAt -> PlaceBlockAt(this.position, this.tileBlock.clone());
-            is CardAction.claimSacreCoeur -> TODO()
             is PlaceBuilding -> PlaceBuilding(this.buildingName, this.position, this.rotation);
+            is ClaimCard -> ClaimCard(this.cardType);
+            is PlaceDecoration -> PlaceDecoration(this.decorationName, this.position, this.rotation);
         }
     }
 
