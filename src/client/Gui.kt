@@ -326,7 +326,7 @@ class BuildStage(private val eventManager: GuiEventManager) : JPanel() {
     private var stagedObject: StagedObject = StagedObject.None;
 
     init {
-        this.preferredSize = Dimension(300, 200);
+        this.preferredSize = Dimension(300, 100);
         this.layout = GridLayout(1, 3, 10, 10);
 
         clearButton.addActionListener { eventManager.emitEvent(GuiEvent.ClickOn.ClearStage); }
@@ -515,7 +515,7 @@ class ScreenCard(private val cardType: CardType, eventManager: GuiEventManager) 
 class CardsCollection(eventManager: GuiEventManager) : JPanel() {
     private val CARD_COLS = 2;
     private val CARD_ROWS = 4;
-    private val SIZE = 400;
+    private val SIZE = 200;
 
     init {
         this.layout = GridLayout(CARD_ROWS, CARD_COLS);
